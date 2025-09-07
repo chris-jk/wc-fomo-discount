@@ -2,7 +2,7 @@
 /**
  * Plugin Name: WooCommerce FOMO Discount Generator
  * Description: Generate limited quantity, time-limited discount codes with real-time countdown
- * Version: 1.0.2
+ * Version: 1.0.3
  * Author: Cash
  * Text Domain: wc-fomo-discount
  */
@@ -13,7 +13,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('WCFD_VERSION', '1.0.2');
+define('WCFD_VERSION', '1.0.3');
 define('WCFD_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('WCFD_PLUGIN_URL', plugin_dir_url(__FILE__));
 
@@ -857,38 +857,66 @@ class WC_FOMO_Discount_Generator
 
             // Create WooCommerce coupon
             error_log('WCFD: Creating WooCommerce coupon with code: ' . $coupon_code);
-            $coupon = new WC_Coupon();
-            $coupon->set_code($coupon_code);
-            $coupon->set_discount_type($discount_type == 'percent' ? 'percent' : 'fixed_cart');
-            $coupon->set_amount($discount_value);
-            $coupon->set_individual_use(true);
-            $coupon->set_usage_limit(1);
-            $coupon->set_usage_limit_per_user(1);
-            $coupon->set_email_restrictions(array($email));
+            
+            try {
+                $coupon = new WC_Coupon();
+                error_log('WCFD: WC_Coupon object created successfully');
+                
+                $coupon->set_code($coupon_code);
+                $coupon->set_discount_type($discount_type == 'percent' ? 'percent' : 'fixed_cart');
+                $coupon->set_amount($discount_value);
+                $coupon->set_individual_use(true);
+                $coupon->set_usage_limit(1);
+                $coupon->set_usage_limit_per_user(1);
+                $coupon->set_email_restrictions(array($email));
+                error_log('WCFD: Basic coupon properties set');
 
-            // Set expiry
-            $expiry = new DateTime();
-            $expiry->add(new DateInterval('PT' . $campaign->expiry_hours . 'H'));
-            $coupon->set_date_expires($expiry->getTimestamp());
+                // Set expiry
+                $expiry = new DateTime();
+                $expiry->add(new DateInterval('PT' . $campaign->expiry_hours . 'H'));
+                $coupon->set_date_expires($expiry->getTimestamp());
+                error_log('WCFD: Expiry date set to: ' . $expiry->format('Y-m-d H:i:s'));
 
-            // Apply scope restrictions
-            if ($campaign->scope_type == 'products' && !empty($campaign->scope_ids)) {
-                $product_ids = array_map('intval', explode(',', $campaign->scope_ids));
-                $coupon->set_product_ids($product_ids);
-            } elseif ($campaign->scope_type == 'categories' && !empty($campaign->scope_ids)) {
-                $category_ids = array_map('intval', explode(',', $campaign->scope_ids));
-                $coupon->set_product_categories($category_ids);
-            }
+                // Apply scope restrictions
+                if ($campaign->scope_type == 'products' && !empty($campaign->scope_ids)) {
+                    $product_ids = array_map('intval', explode(',', $campaign->scope_ids));
+                    $coupon->set_product_ids($product_ids);
+                    error_log('WCFD: Product restrictions applied: ' . implode(',', $product_ids));
+                } elseif ($campaign->scope_type == 'categories' && !empty($campaign->scope_ids)) {
+                    $category_ids = array_map('intval', explode(',', $campaign->scope_ids));
+                    $coupon->set_product_categories($category_ids);
+                    error_log('WCFD: Category restrictions applied: ' . implode(',', $category_ids));
+                }
 
-            $coupon_id = $coupon->save();
-            error_log('WCFD: Coupon save result - ID: ' . $coupon_id);
-            if (!$coupon_id) {
+                error_log('WCFD: About to save coupon...');
+                $coupon_id = $coupon->save();
+                error_log('WCFD: Coupon save result - ID: ' . $coupon_id);
+                
+                if (!$coupon_id) {
+                    $wpdb->query('ROLLBACK');
+                    error_log('WCFD: Coupon save returned false/0');
+                    
+                    // Get WC_Data_Exception errors if available
+                    $errors = $coupon->get_errors();
+                    if (!empty($errors)) {
+                        error_log('WCFD: Coupon validation errors: ' . print_r($errors, true));
+                    }
+                    
+                    if ($verification) {
+                        wp_die(__('Failed to create discount coupon. Please contact support.', 'wc-fomo-discount'));
+                    } else {
+                        wp_send_json_error(__('Failed to create discount coupon', 'wc-fomo-discount'));
+                    }
+                }
+            } catch (Exception $e) {
                 $wpdb->query('ROLLBACK');
-                error_log('WCFD: Failed to create WooCommerce coupon');
+                error_log('WCFD: Exception during coupon creation: ' . $e->getMessage());
+                error_log('WCFD: Exception trace: ' . $e->getTraceAsString());
+                
                 if ($verification) {
-                    wp_die(__('Failed to create discount coupon. Please contact support.', 'wc-fomo-discount'));
+                    wp_die(__('Failed to create discount coupon: ' . $e->getMessage(), 'wc-fomo-discount'));
                 } else {
-                    wp_send_json_error(__('Failed to create discount coupon', 'wc-fomo-discount'));
+                    wp_send_json_error(__('Failed to create discount coupon: ' . $e->getMessage(), 'wc-fomo-discount'));
                 }
             }
 

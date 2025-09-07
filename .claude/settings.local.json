@@ -7,7 +7,8 @@
       "Bash(curl:*)",
       "Bash(git push:*)",
       "Bash(git tag:*)",
-      "Bash(gh release create:*)"
+      "Bash(gh release create:*)",
+      "Bash(gh auth:*)"
     ],
     "deny": [],
     "ask": []
