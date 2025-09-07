@@ -387,7 +387,13 @@ class Admin_Handler {
         if (is_wp_error($result)) {
             $this->add_admin_notice('error', $result->get_error_message());
         } else {
-            $this->add_admin_notice('success', __('Campaign created successfully!', 'wc-fomo-discount'));
+            $campaign_id = is_numeric($result) ? $result : $result->id ?? 'N/A';
+            $message = sprintf(
+                __('Campaign created successfully! ID: %s<br><strong>To display it, add this shortcode to any page/post:</strong><br><code>[fomo_discount id="%s"]</code>', 'wc-fomo-discount'),
+                $campaign_id,
+                $campaign_id
+            );
+            $this->add_admin_notice('success', $message);
             wp_redirect(admin_url('admin.php?page=wcfd-campaigns'));
             exit;
         }
