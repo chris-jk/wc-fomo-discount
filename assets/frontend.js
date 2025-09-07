@@ -15,7 +15,7 @@ jQuery(document).ready(function ($) {
 
     // Constants
     const CONSTANTS = {
-        UPDATE_INTERVAL: 3000,
+        UPDATE_INTERVAL: 15000, // Reduced from 3s to 15s - much less annoying
         ERROR_DISPLAY_TIME: 5000,
         COUNTDOWN_INTERVAL: 60000,
         COPY_FEEDBACK_TIME: 2000,
@@ -43,13 +43,34 @@ jQuery(document).ready(function ($) {
         widget.find('.wcfd-claim-btn').on('click', function (e) {
             e.preventDefault();
             console.log('WCFD Debug: Claim button clicked for campaign:', campaignId);
+            
+            // Stop polling when user interacts
+            clearInterval(updateIntervals[campaignId]);
+            console.log('WCFD: Stopped polling - user interaction');
+            
             claimDiscount(widget, campaignId);
         });
 
-        // Handle enter key in email field
+        // Handle email field interactions
+        widget.find('.wcfd-email').on('focus keydown', function (e) {
+            // Pause polling when user is actively typing
+            if (updateIntervals[campaignId]) {
+                clearInterval(updateIntervals[campaignId]);
+                console.log('WCFD: Paused polling - user typing');
+                
+                // Restart polling after 30 seconds of inactivity
+                setTimeout(() => {
+                    if (!widget.find('.wcfd-success').is(':visible')) {
+                        startRealtimeUpdates(widget, campaignId);
+                    }
+                }, 30000);
+            }
+        });
+        
         widget.find('.wcfd-email').on('keypress', function (e) {
             if (e.which === 13) {
                 e.preventDefault();
+                clearInterval(updateIntervals[campaignId]);
                 claimDiscount(widget, campaignId);
             }
         });
@@ -57,10 +78,26 @@ jQuery(document).ready(function ($) {
 
     function startRealtimeUpdates(widget, campaignId) {
         let isUpdating = false;
+        let pollCount = 0;
+        const maxPolls = 20; // Stop after 20 polls (5 minutes)
         
-        // Update every 3 seconds
+        // Don't start polling if user has already claimed or if codes are 0
+        if (widget.find('.wcfd-success').is(':visible') || widget.find('.wcfd-waitlist-form').length > 0) {
+            return;
+        }
+        
+        // Update every 15 seconds (much less aggressive)
         updateIntervals[campaignId] = setInterval(function () {
             if (isUpdating) return;
+            
+            // Stop polling after max attempts to prevent endless requests
+            pollCount++;
+            if (pollCount > maxPolls) {
+                clearInterval(updateIntervals[campaignId]);
+                console.log('WCFD: Stopped polling after', maxPolls, 'attempts');
+                return;
+            }
+            
             isUpdating = true;
             $.ajax({
                 url: wcfd_ajax.ajax_url,
