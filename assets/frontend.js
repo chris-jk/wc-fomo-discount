@@ -10,6 +10,9 @@ jQuery(document).ready(function ($) {
         return;
     }
 
+    // Check for pending coupon on page load (cart/checkout pages)
+    checkAndApplyPendingCoupon();
+
     // Constants
     const CONSTANTS = {
         UPDATE_INTERVAL: 3000,
@@ -196,6 +199,9 @@ jQuery(document).ready(function ($) {
                     // Start countdown timer for code expiry
                     startExpiryCountdown(widget, expiryDate);
 
+                    // Auto-apply coupon to cart
+                    autoApplyCoupon(response.data.code);
+
                 } else {
                     console.error('Discount claim failed:', response);
                     let errorMsg = response.data || 'Unknown error occurred';
@@ -372,6 +378,117 @@ jQuery(document).ready(function ($) {
             }, CONSTANTS.NOTIFICATION_TIME);
         }
     });
+
+    function checkAndApplyPendingCoupon() {
+        if (typeof(Storage) === "undefined") {
+            return;
+        }
+
+        const pendingCoupon = localStorage.getItem('wcfd_pending_coupon');
+        const couponTime = localStorage.getItem('wcfd_pending_coupon_time');
+
+        if (!pendingCoupon || !couponTime) {
+            return;
+        }
+
+        // Check if coupon is still valid (within 24 hours)
+        const timeDiff = Date.now() - parseInt(couponTime);
+        const twentyFourHours = 24 * 60 * 60 * 1000;
+
+        if (timeDiff > twentyFourHours) {
+            localStorage.removeItem('wcfd_pending_coupon');
+            localStorage.removeItem('wcfd_pending_coupon_time');
+            return;
+        }
+
+        // Check if we're on cart or checkout page
+        const isCartPage = $('body').hasClass('woocommerce-cart');
+        const isCheckoutPage = $('body').hasClass('woocommerce-checkout');
+
+        if (isCartPage || isCheckoutPage) {
+            console.log('WCFD: Found pending coupon, attempting to apply:', pendingCoupon);
+            
+            // Wait a moment for WooCommerce to load
+            setTimeout(function() {
+                applyPendingCoupon(pendingCoupon);
+            }, 500);
+        }
+    }
+
+    function applyPendingCoupon(couponCode) {
+        // Check if coupon is already applied
+        if ($('.woocommerce-remove-coupon[data-coupon="' + couponCode + '"]').length > 0) {
+            console.log('WCFD: Coupon already applied:', couponCode);
+            localStorage.removeItem('wcfd_pending_coupon');
+            localStorage.removeItem('wcfd_pending_coupon_time');
+            return;
+        }
+
+        // Try to apply the coupon
+        const $couponForm = $('.checkout_coupon, .coupon');
+        if ($couponForm.length > 0) {
+            const $couponInput = $couponForm.find('input[name="coupon_code"]');
+            if ($couponInput.length > 0) {
+                $couponInput.val(couponCode);
+                $couponForm.find('button[name="apply_coupon"], input[name="apply_coupon"]').click();
+                
+                // Clear the pending coupon
+                localStorage.removeItem('wcfd_pending_coupon');
+                localStorage.removeItem('wcfd_pending_coupon_time');
+            }
+        }
+    }
+
+    function autoApplyCoupon(couponCode) {
+        console.log('WCFD: Attempting to auto-apply coupon:', couponCode);
+        
+        // Store coupon for later use if cart is empty or user navigates away
+        if (typeof(Storage) !== "undefined") {
+            localStorage.setItem('wcfd_pending_coupon', couponCode);
+            localStorage.setItem('wcfd_pending_coupon_time', Date.now());
+        }
+
+        // Try to apply coupon immediately if WooCommerce AJAX is available
+        let ajaxUrl = wcfd_ajax.ajax_url;
+        let nonce = '';
+        
+        // Check for WooCommerce checkout/cart nonce
+        if (typeof wc_checkout_params !== 'undefined' && wc_checkout_params.apply_coupon_nonce) {
+            nonce = wc_checkout_params.apply_coupon_nonce;
+        } else if (typeof wc_add_to_cart_params !== 'undefined' && wc_add_to_cart_params.apply_coupon_nonce) {
+            nonce = wc_add_to_cart_params.apply_coupon_nonce;
+        }
+
+        // Apply coupon via WooCommerce AJAX
+        $.ajax({
+            type: 'POST',
+            url: ajaxUrl,
+            data: {
+                action: 'woocommerce_apply_coupon',
+                coupon_code: couponCode,
+                security: nonce
+            },
+            success: function(response) {
+                if (response && (response.result === 'success' || response.success)) {
+                    console.log('WCFD: Coupon applied successfully:', couponCode);
+                    // Clear stored coupon since it was applied
+                    if (typeof(Storage) !== "undefined") {
+                        localStorage.removeItem('wcfd_pending_coupon');
+                        localStorage.removeItem('wcfd_pending_coupon_time');
+                    }
+                    // Trigger WooCommerce events
+                    $(document.body).trigger('applied_coupon', [couponCode]);
+                    $(document.body).trigger('update_checkout');
+                    $(document.body).trigger('wc_update_cart');
+                } else {
+                    console.log('WCFD: Coupon auto-apply failed, will try on cart/checkout page');
+                }
+            },
+            error: function(xhr, status, error) {
+                console.log('WCFD: Auto-apply coupon AJAX error, will try on cart/checkout page');
+            }
+        });
+    }
 
     function showWaitlistForm(widget, campaignId) {
         const waitlistForm = $(`

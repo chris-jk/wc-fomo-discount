@@ -50,6 +50,9 @@ class WC_FOMO_Discount_Generator
         add_action('wp_ajax_nopriv_wcfd_verify_email', array($this, 'ajax_verify_email'));
         add_action('wp_ajax_wcfd_join_waitlist', array($this, 'ajax_join_waitlist'));
         add_action('wp_ajax_nopriv_wcfd_join_waitlist', array($this, 'ajax_join_waitlist'));
+        add_action('wp_ajax_wcfd_delete_lead', array($this, 'ajax_delete_lead'));
+        add_action('wp_ajax_wcfd_delete_campaign', array($this, 'ajax_delete_campaign'));
+        add_action('wp_ajax_wcfd_toggle_campaign_status', array($this, 'ajax_toggle_campaign_status'));
 
         // Shortcode for discount widget
         add_shortcode('fomo_discount', array($this, 'render_discount_widget'));
@@ -384,6 +387,9 @@ class WC_FOMO_Discount_Generator
                                         <a href="#" class="button wcfd-toggle-status" data-id="<?php echo $campaign->id; ?>">
                                             <?php echo $campaign->status == 'active' ? 'Pause' : 'Activate'; ?>
                                         </a>
+                                        <a href="#" class="button button-secondary wcfd-delete-campaign" data-id="<?php echo $campaign->id; ?>" data-name="<?php echo esc_attr($campaign->campaign_name); ?>" style="color: #d63384;">
+                                            Delete
+                                        </a>
                                     </td>
                                 </tr>
                             <?php endforeach; ?>
@@ -434,6 +440,46 @@ class WC_FOMO_Discount_Generator
                     
                     // Initialize on page load
                     updateTierSuffixes();
+                    
+                    // Handle campaign toggle status
+                    $('.wcfd-toggle-status').on('click', function(e) {
+                        e.preventDefault();
+                        var campaignId = $(this).data('id');
+                        var button = $(this);
+                        
+                        $.post(ajaxurl, {
+                            action: 'wcfd_toggle_campaign_status',
+                            campaign_id: campaignId,
+                            nonce: '<?php echo wp_create_nonce('wcfd_nonce'); ?>'
+                        }, function(response) {
+                            if (response.success) {
+                                location.reload();
+                            } else {
+                                alert('Error: ' + response.data);
+                            }
+                        });
+                    });
+                    
+                    // Handle campaign deletion
+                    $('.wcfd-delete-campaign').on('click', function(e) {
+                        e.preventDefault();
+                        var campaignId = $(this).data('id');
+                        var campaignName = $(this).data('name');
+                        
+                        if (confirm('Are you sure you want to delete the campaign "' + campaignName + '"? This will also delete all associated claimed codes and cannot be undone.')) {
+                            $.post(ajaxurl, {
+                                action: 'wcfd_delete_campaign',
+                                campaign_id: campaignId,
+                                nonce: '<?php echo wp_create_nonce('wcfd_nonce'); ?>'
+                            }, function(response) {
+                                if (response.success) {
+                                    location.reload();
+                                } else {
+                                    alert('Error: ' + response.data);
+                                }
+                            });
+                        }
+                    });
                 });
             </script>
         </div>
@@ -935,6 +981,22 @@ class WC_FOMO_Discount_Generator
             }
 
             // Record in database
+            error_log('WCFD: About to insert into database...');
+            error_log('WCFD: Table name: ' . $wpdb->prefix . 'wcfd_claimed_codes');
+            
+            // Check if table exists first
+            $table_exists = $wpdb->get_var("SHOW TABLES LIKE '{$wpdb->prefix}wcfd_claimed_codes'") == $wpdb->prefix . 'wcfd_claimed_codes';
+            error_log('WCFD: Table exists before insert: ' . ($table_exists ? 'YES' : 'NO'));
+            
+            if (!$table_exists) {
+                error_log('WCFD: Table missing, creating tables...');
+                $this->create_tables();
+                
+                // Check again after creation
+                $table_exists = $wpdb->get_var("SHOW TABLES LIKE '{$wpdb->prefix}wcfd_claimed_codes'") == $wpdb->prefix . 'wcfd_claimed_codes';
+                error_log('WCFD: Table exists after creation: ' . ($table_exists ? 'YES' : 'NO'));
+            }
+            
             $result = $wpdb->insert(
                 $wpdb->prefix . 'wcfd_claimed_codes',
                 array(
@@ -945,7 +1007,8 @@ class WC_FOMO_Discount_Generator
                     'expires_at' => $expiry->format('Y-m-d H:i:s'),
                     'ip_address' => $ip_address,
                     'email_verified' => $email_verified ? 1 : 0
-                )
+                ),
+                array('%d', '%s', '%d', '%s', '%s', '%s', '%d')
             );
             
             if ($result === false) {
@@ -1360,12 +1423,13 @@ class WC_FOMO_Discount_Generator
                         <th><?php _e('Claimed', 'wc-fomo-discount'); ?></th>
                         <th><?php _e('Status', 'wc-fomo-discount'); ?></th>
                         <th><?php _e('IP Address', 'wc-fomo-discount'); ?></th>
+                        <th><?php _e('Actions', 'wc-fomo-discount'); ?></th>
                     </tr>
                 </thead>
                 <tbody>
                     <?php if (empty($emails)): ?>
                         <tr>
-                            <td colspan="6" style="text-align: center; padding: 40px;">
+                            <td colspan="7" style="text-align: center; padding: 40px;">
                                 <?php _e('No emails captured yet.', 'wc-fomo-discount'); ?>
                             </td>
                         </tr>
@@ -1386,6 +1450,11 @@ class WC_FOMO_Discount_Generator
                                     <?php endif; ?>
                                 </td>
                                 <td><?php echo esc_html($email->ip_address); ?></td>
+                                <td>
+                                    <a href="#" class="button button-small wcfd-delete-lead" data-id="<?php echo $email->id; ?>" data-email="<?php echo esc_attr($email->user_email); ?>" style="color: #d63384;">
+                                        Delete
+                                    </a>
+                                </td>
                             </tr>
                         <?php endforeach; ?>
                     <?php endif; ?>
@@ -1464,6 +1533,31 @@ class WC_FOMO_Discount_Generator
         .wcfd-status.expired { background: #f8d7da; color: #721c24; }
         .wcfd-status.active { background: #fff3cd; color: #856404; }
         </style>
+        
+        <script>
+        jQuery(document).ready(function($) {
+            // Handle email lead deletion
+            $('.wcfd-delete-lead').on('click', function(e) {
+                e.preventDefault();
+                var leadId = $(this).data('id');
+                var email = $(this).data('email');
+                
+                if (confirm('Are you sure you want to delete the lead for "' + email + '"? This will also remove the associated WooCommerce coupon and cannot be undone.')) {
+                    $.post(ajaxurl, {
+                        action: 'wcfd_delete_lead',
+                        lead_id: leadId,
+                        nonce: '<?php echo wp_create_nonce('wcfd_nonce'); ?>'
+                    }, function(response) {
+                        if (response.success) {
+                            location.reload();
+                        } else {
+                            alert('Error: ' + response.data);
+                        }
+                    });
+                }
+            });
+        });
+        </script>
         <?php
     }
     
@@ -2006,6 +2100,150 @@ class WC_FOMO_Discount_Generator
         echo 'Deleted: ' . $claimed_deleted . ' claimed codes, ' . $verifications_deleted . ' pending verifications, ' . $waitlist_deleted . ' waitlist entries<br>';
         echo 'Removed: ' . $deleted_coupons . ' WooCommerce coupons<br>';
         echo 'Reset all campaigns to full code availability</p></div>';
+    }
+    
+    public function ajax_delete_lead() {
+        check_ajax_referer('wcfd_nonce', 'nonce');
+        
+        if (!current_user_can('manage_woocommerce')) {
+            wp_send_json_error(__('Insufficient permissions', 'wc-fomo-discount'));
+        }
+        
+        $lead_id = intval($_POST['lead_id']);
+        
+        if (!$lead_id) {
+            wp_send_json_error(__('Invalid lead ID', 'wc-fomo-discount'));
+        }
+        
+        global $wpdb;
+        
+        // Get the lead info first
+        $lead = $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM {$wpdb->prefix}wcfd_claimed_codes WHERE id = %d",
+            $lead_id
+        ));
+        
+        if (!$lead) {
+            wp_send_json_error(__('Lead not found', 'wc-fomo-discount'));
+        }
+        
+        // Delete the associated WooCommerce coupon
+        $coupon = new WC_Coupon($lead->coupon_code);
+        if ($coupon->get_id()) {
+            $coupon->delete(true);
+        }
+        
+        // Delete the lead from database
+        $result = $wpdb->delete(
+            $wpdb->prefix . 'wcfd_claimed_codes',
+            array('id' => $lead_id),
+            array('%d')
+        );
+        
+        if ($result === false) {
+            wp_send_json_error(__('Failed to delete lead', 'wc-fomo-discount'));
+        }
+        
+        // Increment the codes_remaining in campaign
+        $wpdb->query($wpdb->prepare(
+            "UPDATE {$wpdb->prefix}wcfd_campaigns 
+            SET codes_remaining = codes_remaining + 1 
+            WHERE id = %d",
+            $lead->campaign_id
+        ));
+        
+        wp_send_json_success(__('Lead deleted successfully', 'wc-fomo-discount'));
+    }
+    
+    public function ajax_delete_campaign() {
+        check_ajax_referer('wcfd_nonce', 'nonce');
+        
+        if (!current_user_can('manage_woocommerce')) {
+            wp_send_json_error(__('Insufficient permissions', 'wc-fomo-discount'));
+        }
+        
+        $campaign_id = intval($_POST['campaign_id']);
+        
+        if (!$campaign_id) {
+            wp_send_json_error(__('Invalid campaign ID', 'wc-fomo-discount'));
+        }
+        
+        global $wpdb;
+        
+        // Get all claimed codes for this campaign to delete associated WooCommerce coupons
+        $claimed_codes = $wpdb->get_results($wpdb->prepare(
+            "SELECT coupon_code FROM {$wpdb->prefix}wcfd_claimed_codes WHERE campaign_id = %d",
+            $campaign_id
+        ));
+        
+        // Delete all associated WooCommerce coupons
+        foreach ($claimed_codes as $code) {
+            $coupon = new WC_Coupon($code->coupon_code);
+            if ($coupon->get_id()) {
+                $coupon->delete(true);
+            }
+        }
+        
+        // Delete all related data
+        $wpdb->delete($wpdb->prefix . 'wcfd_claimed_codes', array('campaign_id' => $campaign_id), array('%d'));
+        $wpdb->delete($wpdb->prefix . 'wcfd_email_verifications', array('campaign_id' => $campaign_id), array('%d'));
+        $wpdb->delete($wpdb->prefix . 'wcfd_waitlist', array('campaign_id' => $campaign_id), array('%d'));
+        
+        // Delete the campaign itself
+        $result = $wpdb->delete(
+            $wpdb->prefix . 'wcfd_campaigns',
+            array('id' => $campaign_id),
+            array('%d')
+        );
+        
+        if ($result === false) {
+            wp_send_json_error(__('Failed to delete campaign', 'wc-fomo-discount'));
+        }
+        
+        wp_send_json_success(__('Campaign deleted successfully', 'wc-fomo-discount'));
+    }
+    
+    public function ajax_toggle_campaign_status() {
+        check_ajax_referer('wcfd_nonce', 'nonce');
+        
+        if (!current_user_can('manage_woocommerce')) {
+            wp_send_json_error(__('Insufficient permissions', 'wc-fomo-discount'));
+        }
+        
+        $campaign_id = intval($_POST['campaign_id']);
+        
+        if (!$campaign_id) {
+            wp_send_json_error(__('Invalid campaign ID', 'wc-fomo-discount'));
+        }
+        
+        global $wpdb;
+        
+        // Get current status
+        $current_status = $wpdb->get_var($wpdb->prepare(
+            "SELECT status FROM {$wpdb->prefix}wcfd_campaigns WHERE id = %d",
+            $campaign_id
+        ));
+        
+        if (!$current_status) {
+            wp_send_json_error(__('Campaign not found', 'wc-fomo-discount'));
+        }
+        
+        // Toggle status
+        $new_status = ($current_status === 'active') ? 'paused' : 'active';
+        
+        $result = $wpdb->update(
+            $wpdb->prefix . 'wcfd_campaigns',
+            array('status' => $new_status),
+            array('id' => $campaign_id),
+            array('%s'),
+            array('%d')
+        );
+        
+        if ($result === false) {
+            wp_send_json_error(__('Failed to update campaign status', 'wc-fomo-discount'));
+        }
+        
+        wp_send_json_success(sprintf(__('Campaign %s successfully', 'wc-fomo-discount'), $new_status));
     }
 }
 
