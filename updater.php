@@ -191,9 +191,9 @@ class WCFD_Auto_Updater {
     private function get_download_url() {
         if (!empty($this->github_token)) {
             // For private repos, use the API download endpoint
-            return "https://api.github.com/repos/{$this->github_user}/{$this->github_repo}/zipball/main";
+            return "https://api.github.com/repos/{$this->github_user}/{$this->github_repo}/zipball/master";
         }
-        return "https://github.com/{$this->github_user}/{$this->github_repo}/archive/main.zip";
+        return "https://github.com/{$this->github_user}/{$this->github_repo}/archive/master.zip";
     }
     
     private function get_api_url($endpoint) {
