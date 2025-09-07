@@ -2,7 +2,7 @@
 /**
  * Plugin Name: WooCommerce FOMO Discount Generator
  * Description: Generate limited quantity, time-limited discount codes with real-time countdown
- * Version: 2.0.0
+ * Version: 2.0.1
  * Author: Cash
  * Text Domain: wc-fomo-discount
  * Requires at least: 5.0
@@ -19,7 +19,7 @@ if (!defined('ABSPATH')) {
 
 // Define plugin constants
 if (!defined('WCFD_VERSION')) {
-    define('WCFD_VERSION', '2.0.0');
+    define('WCFD_VERSION', '2.0.1');
 }
 if (!defined('WCFD_PLUGIN_DIR')) {
     define('WCFD_PLUGIN_DIR', plugin_dir_path(__FILE__));
