@@ -2,7 +2,7 @@
 /**
  * Plugin Name: WooCommerce FOMO Discount Generator
  * Description: Generate limited quantity, time-limited discount codes with real-time countdown
- * Version: 1.0.0
+ * Version: 1.0.2
  * Author: Cash
  * Text Domain: wc-fomo-discount
  */
@@ -602,6 +602,22 @@ class WC_FOMO_Discount_Generator
         error_log('WCFD: ajax_claim_discount called');
         error_log('WCFD: POST data: ' . print_r($_POST, true));
         
+        // Check if database tables exist
+        global $wpdb;
+        $campaigns_table = $wpdb->prefix . 'wcfd_campaigns';
+        $claimed_table = $wpdb->prefix . 'wcfd_claimed_codes';
+        
+        $campaigns_exists = $wpdb->get_var("SHOW TABLES LIKE '$campaigns_table'") == $campaigns_table;
+        $claimed_exists = $wpdb->get_var("SHOW TABLES LIKE '$claimed_table'") == $claimed_table;
+        
+        error_log('WCFD: Campaigns table exists: ' . ($campaigns_exists ? 'YES' : 'NO'));
+        error_log('WCFD: Claimed codes table exists: ' . ($claimed_exists ? 'YES' : 'NO'));
+        
+        if (!$campaigns_exists || !$claimed_exists) {
+            error_log('WCFD: Database tables missing, attempting to create...');
+            $this->create_tables();
+        }
+        
         // Check WooCommerce
         if (!class_exists('WooCommerce')) {
             error_log('WCFD: WooCommerce not found');
@@ -804,12 +820,15 @@ class WC_FOMO_Discount_Generator
 
             if (!$campaign) {
                 $wpdb->query('ROLLBACK');
+                error_log('WCFD: Campaign not found - ID: ' . $campaign_id);
                 if ($verification) {
                     wp_die(__('Sorry, this campaign is no longer available.', 'wc-fomo-discount'));
                 } else {
                     wp_send_json_error(__('Campaign not available', 'wc-fomo-discount'));
                 }
             }
+            
+            error_log('WCFD: Found campaign - ID: ' . $campaign->id . ', Name: ' . $campaign->campaign_name . ', Codes remaining: ' . $campaign->codes_remaining);
 
             // Check IP limiting
             if ($campaign->enable_ip_limit) {
@@ -837,6 +856,7 @@ class WC_FOMO_Discount_Generator
             $coupon_code = $verification ? $verification->coupon_code : 'FOMO' . strtoupper(wp_generate_password(8, false));
 
             // Create WooCommerce coupon
+            error_log('WCFD: Creating WooCommerce coupon with code: ' . $coupon_code);
             $coupon = new WC_Coupon();
             $coupon->set_code($coupon_code);
             $coupon->set_discount_type($discount_type == 'percent' ? 'percent' : 'fixed_cart');
@@ -861,8 +881,10 @@ class WC_FOMO_Discount_Generator
             }
 
             $coupon_id = $coupon->save();
+            error_log('WCFD: Coupon save result - ID: ' . $coupon_id);
             if (!$coupon_id) {
                 $wpdb->query('ROLLBACK');
+                error_log('WCFD: Failed to create WooCommerce coupon');
                 if ($verification) {
                     wp_die(__('Failed to create discount coupon. Please contact support.', 'wc-fomo-discount'));
                 } else {
@@ -886,19 +908,29 @@ class WC_FOMO_Discount_Generator
             
             if ($result === false) {
                 $wpdb->query('ROLLBACK');
-                // Log the database error for debugging
-                error_log('WCFD Database Error: ' . $wpdb->last_error);
-                error_log('WCFD Failed Query: ' . $wpdb->last_query);
+                // Enhanced database error logging
+                error_log('WCFD Database Insert Failed:');
+                error_log('- Database Error: ' . $wpdb->last_error);
+                error_log('- Last Query: ' . $wpdb->last_query);
+                error_log('- Campaign ID: ' . $campaign_id);
+                error_log('- Email: ' . $email);
+                error_log('- Coupon Code: ' . $coupon_code);
+                error_log('- Expiry: ' . $expiry->format('Y-m-d H:i:s'));
+                error_log('- IP: ' . $ip_address);
+                error_log('- Email Verified: ' . ($email_verified ? 1 : 0));
                 
                 $error_message = 'Failed to save discount code';
-                if (defined('WP_DEBUG') && WP_DEBUG && !empty($wpdb->last_error)) {
+                if (!empty($wpdb->last_error)) {
                     $error_message .= ': ' . $wpdb->last_error;
                 }
                 
+                // Always include detailed error for debugging (temporary)
+                $detailed_error = $error_message . ' | Query: ' . $wpdb->last_query;
+                
                 if ($verification) {
-                    wp_die(__($error_message . '. Please contact support.', 'wc-fomo-discount'));
+                    wp_die(__($detailed_error . '. Please contact support.', 'wc-fomo-discount'));
                 } else {
-                    wp_send_json_error(__($error_message, 'wc-fomo-discount'));
+                    wp_send_json_error(__($detailed_error, 'wc-fomo-discount'));
                 }
             }
 
