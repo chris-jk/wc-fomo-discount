@@ -1,5 +1,14 @@
 // assets/frontend.js
 jQuery(document).ready(function ($) {
+    
+    // Debug: Check if wcfd_ajax is loaded
+    console.log('WCFD Debug: wcfd_ajax object:', typeof wcfd_ajax !== 'undefined' ? wcfd_ajax : 'NOT DEFINED');
+    
+    // Safety check for wcfd_ajax
+    if (typeof wcfd_ajax === 'undefined') {
+        console.error('WCFD Error: wcfd_ajax object not found. Plugin may not be loaded correctly.');
+        return;
+    }
 
     // Constants
     const CONSTANTS = {
@@ -15,9 +24,11 @@ jQuery(document).ready(function ($) {
     // Real-time counter update
     let updateIntervals = {};
 
+    console.log('WCFD Debug: Looking for widgets...');
     $('.wcfd-discount-widget').each(function () {
         const widget = $(this);
         const campaignId = widget.data('campaign-id');
+        console.log('WCFD Debug: Found widget for campaign:', campaignId);
 
         // Start real-time updates for this widget
         startRealtimeUpdates(widget, campaignId);
@@ -25,6 +36,7 @@ jQuery(document).ready(function ($) {
         // Handle claim button click
         widget.find('.wcfd-claim-btn').on('click', function (e) {
             e.preventDefault();
+            console.log('WCFD Debug: Claim button clicked for campaign:', campaignId);
             claimDiscount(widget, campaignId);
         });
 
@@ -148,7 +160,7 @@ jQuery(document).ready(function ($) {
                     if (response.data.message) {
                         // Show verification message
                         widget.find('.wcfd-claim-form').fadeOut(400, function() {
-                            $(this).html('<div class="wcfd-verification-sent"><h4>📧 Check Your Email!</h4><p>' + response.data.message + '</p><p><small>Don\\'t see it? Check your spam folder.</small></p></div>').fadeIn(200);
+                            $(this).html('<div class="wcfd-verification-sent"><h4>📧 Check Your Email!</h4><p>' + response.data.message + '</p><p><small>Don\'t see it? Check your spam folder.</small></p></div>').fadeIn(200);
                         });
                         return;
                     }

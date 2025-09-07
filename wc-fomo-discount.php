@@ -573,12 +573,12 @@ class WC_FOMO_Discount_Generator
 
             <div class="wcfd-claim-form">
                 <?php if (is_user_logged_in()): ?>
-                    <button class="wcfd-claim-btn" data-campaign="<?php echo $campaign->id; ?>">
+                    <button class="wcfd-claim-btn">
                         Claim Your Discount Now!
                     </button>
                 <?php else: ?>
                     <input type="email" class="wcfd-email" placeholder="Enter your email" required />
-                    <button class="wcfd-claim-btn" data-campaign="<?php echo $campaign->id; ?>">
+                    <button class="wcfd-claim-btn">
                         Get My Code!
                     </button>
                 <?php endif; ?>
@@ -598,6 +598,16 @@ class WC_FOMO_Discount_Generator
 
     public function ajax_claim_discount()
     {
+        // Debug logging
+        error_log('WCFD: ajax_claim_discount called');
+        error_log('WCFD: POST data: ' . print_r($_POST, true));
+        
+        // Check WooCommerce
+        if (!class_exists('WooCommerce')) {
+            error_log('WCFD: WooCommerce not found');
+            wp_send_json_error(__('WooCommerce is required', 'wc-fomo-discount'));
+        }
+        
         check_ajax_referer('wcfd_nonce', 'nonce');
 
         $campaign_id = intval($_POST['campaign_id']);
