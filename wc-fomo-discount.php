@@ -1750,18 +1750,27 @@ class WC_FOMO_Discount_Generator
         // Clear WordPress update transient to force check
         delete_site_transient('update_plugins');
         
-        // Try to get the latest version
-        $updater = new WCFD_Auto_Updater(__FILE__, 'chris-jk', 'wc-fomo-discount', WCFD_VERSION);
-        $remote_version = $this->get_remote_version_direct();
+        // Try to get the latest version with detailed debug info
+        $debug_info = $this->get_remote_version_with_debug();
         
-        if ($remote_version) {
-            if (version_compare(WCFD_VERSION, $remote_version, '<')) {
-                echo '<div class="notice notice-info is-dismissible"><p><strong>🎉 Update Available!</strong> Version ' . esc_html($remote_version) . ' is available. You are currently running version ' . esc_html(WCFD_VERSION) . '. <a href="' . admin_url('plugins.php') . '">Go to Plugins page to update</a>.</p></div>';
+        if ($debug_info['success'] && $debug_info['version']) {
+            if (version_compare(WCFD_VERSION, $debug_info['version'], '<')) {
+                echo '<div class="notice notice-info is-dismissible"><p><strong>🎉 Update Available!</strong> Version ' . esc_html($debug_info['version']) . ' is available. You are currently running version ' . esc_html(WCFD_VERSION) . '. <a href="' . admin_url('plugins.php') . '">Go to Plugins page to update</a>.</p></div>';
             } else {
                 echo '<div class="notice notice-success is-dismissible"><p><strong>✅ You\'re up to date!</strong> You are running the latest version (' . esc_html(WCFD_VERSION) . ').</p></div>';
             }
         } else {
-            echo '<div class="notice notice-error is-dismissible"><p><strong>❌ Update Check Failed</strong> Unable to check for updates. Please ensure your server can access GitHub API or check manually on <a href="https://github.com/chris-jk/wc-fomo-discount" target="_blank">GitHub</a>.</p></div>';
+            echo '<div class="notice notice-error is-dismissible">';
+            echo '<p><strong>❌ Update Check Failed</strong></p>';
+            echo '<p><strong>Error:</strong> ' . esc_html($debug_info['error']) . '</p>';
+            if (!empty($debug_info['http_code'])) {
+                echo '<p><strong>HTTP Code:</strong> ' . esc_html($debug_info['http_code']) . '</p>';
+            }
+            if (!empty($debug_info['response_body'])) {
+                echo '<p><strong>Response:</strong> <code style="background: #f0f0f0; padding: 5px; display: block; white-space: pre-wrap; max-height: 200px; overflow: auto;">' . esc_html($debug_info['response_body']) . '</code></p>';
+            }
+            echo '<p>Please ensure your server can access GitHub API or check manually on <a href="https://github.com/chris-jk/wc-fomo-discount" target="_blank">GitHub</a>.</p>';
+            echo '</div>';
         }
     }
     
@@ -1813,6 +1822,70 @@ class WC_FOMO_Discount_Generator
         
         error_log('WCFD Update Check: No tag_name found in response');
         return false;
+    }
+    
+    private function get_remote_version_with_debug() {
+        $request = wp_remote_get('https://api.github.com/repos/chris-jk/wc-fomo-discount/releases/latest', array(
+            'timeout' => 15,
+            'sslverify' => true,
+            'user-agent' => 'WordPress/' . get_bloginfo('version') . '; ' . home_url(),
+            'headers' => array(
+                'Accept' => 'application/vnd.github.v3+json'
+            )
+        ));
+        
+        if (is_wp_error($request)) {
+            return array(
+                'success' => false,
+                'error' => $request->get_error_message(),
+                'version' => false,
+                'http_code' => null,
+                'response_body' => null
+            );
+        }
+        
+        $response_code = wp_remote_retrieve_response_code($request);
+        $body = wp_remote_retrieve_body($request);
+        
+        if ($response_code != 200) {
+            return array(
+                'success' => false,
+                'error' => 'HTTP Error ' . $response_code,
+                'version' => false,
+                'http_code' => $response_code,
+                'response_body' => $body
+            );
+        }
+        
+        $data = json_decode($body, true);
+        
+        if (!$data) {
+            return array(
+                'success' => false,
+                'error' => 'Invalid JSON response',
+                'version' => false,
+                'http_code' => $response_code,
+                'response_body' => $body
+            );
+        }
+        
+        if (!isset($data['tag_name'])) {
+            return array(
+                'success' => false,
+                'error' => 'No tag_name found in response',
+                'version' => false,
+                'http_code' => $response_code,
+                'response_body' => $body
+            );
+        }
+        
+        return array(
+            'success' => true,
+            'error' => null,
+            'version' => ltrim($data['tag_name'], 'v'),
+            'http_code' => $response_code,
+            'response_body' => null
+        );
     }
 }
 
