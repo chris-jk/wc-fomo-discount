@@ -70,6 +70,9 @@ class Frontend_Handler {
      * Enqueue frontend scripts and styles
      */
     public function enqueue_scripts() {
+        // Debug log to confirm our refactored system is running
+        error_log('WCFD: Refactored frontend handler enqueuing scripts - Version: ' . WCFD_VERSION);
+        
         // Only enqueue on pages that have the widget or shortcode
         if (!$this->should_enqueue_assets()) {
             return;
@@ -91,12 +94,12 @@ class Frontend_Handler {
             WCFD_VERSION
         );
         
-        // Main JS
+        // Main JS - Force cache bust
         wp_enqueue_script(
             'wcfd-frontend',
             WCFD_PLUGIN_URL . 'assets/frontend.js',
             ['jquery'],
-            WCFD_VERSION,
+            WCFD_VERSION . '.' . time(),
             true
         );
         
