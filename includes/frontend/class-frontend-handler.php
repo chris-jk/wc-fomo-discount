@@ -54,6 +54,8 @@ class Frontend_Handler {
     private function init_hooks() {
         add_action('wp_enqueue_scripts', [$this, 'enqueue_scripts']);
         add_shortcode('fomo_discount', [$this, 'render_shortcode']);
+        add_action('init', [$this, 'handle_autologin']);
+        add_action('init', [$this, 'handle_coupon_application']);
         
         // AJAX handlers
         add_action('wp_ajax_wcfd_claim_discount', [$this, 'ajax_claim_discount']);
@@ -281,6 +283,9 @@ class Frontend_Handler {
         $token = wp_generate_password(32, false);
         $coupon_code = 'FOMO' . strtoupper(wp_generate_password(8, false));
         
+        // Create or get user account
+        $user_id = $this->create_or_get_user($email);
+        
         // Store verification request
         $wpdb->insert(
             $wpdb->prefix . 'wcfd_email_verifications',
@@ -295,17 +300,60 @@ class Frontend_Handler {
             ['%d', '%s', '%s', '%s', '%s', '%s']
         );
         
+        // Create auto-login token
+        $login_token = wp_generate_password(32, false);
+        update_user_meta($user_id, 'wcfd_autologin_token', $login_token);
+        update_user_meta($user_id, 'wcfd_autologin_expires', time() + 3600); // 1 hour
+        
+        // Get the current page URL to redirect back to after verification
+        $current_url = $_SERVER['HTTP_REFERER'] ?? home_url();
+        
         // Send verification email
         $verification_url = add_query_arg([
             'wcfd_verify' => $token,
-            'email' => urlencode($email)
+            'email' => urlencode($email),
+            'redirect_to' => urlencode($current_url),
+            'wcfd_autologin' => $login_token
         ], home_url());
         
         $campaign = $this->campaign_manager->get_campaign($campaign_id);
-        $subject = sprintf(__('Verify your email to claim your %s discount', 'wc-fomo-discount'), $campaign->campaign_name);
+        $subject = sprintf(__('🎉 Your %s Discount Code Inside!', 'wc-fomo-discount'), $campaign->campaign_name);
         
+        $discount_text = $campaign->discount_type == 'percent' 
+            ? $campaign->discount_value . '% OFF' 
+            : 'SAVE $' . $campaign->discount_value;
+            
+        // Create direct checkout link with coupon pre-applied and auto-login
+        $checkout_url = add_query_arg([
+            'wcfd_apply_coupon' => $coupon_code,
+            'wcfd_token' => $token,
+            'wcfd_autologin' => $login_token
+        ], wc_get_checkout_url());
+        
+        // Create shop link with coupon ready to apply and auto-login
+        $shop_url = add_query_arg([
+            'wcfd_apply_coupon' => $coupon_code,
+            'wcfd_token' => $token,
+            'wcfd_autologin' => $login_token
+        ], wc_get_page_permalink('shop'));
+            
         $message = sprintf(
-            __("Click the link below to verify your email and claim your exclusive discount code:\n\n%s\n\nThis link expires in 1 hour.\n\nIf you didn't request this, please ignore this email.", 'wc-fomo-discount'),
+            __("🎉 CONGRATULATIONS! Your exclusive discount is ready!\n\n" .
+            "🎁 DISCOUNT CODE: %s\n" .
+            "💰 YOUR SAVINGS: %s\n" .
+            "⏰ EXPIRES: 24 hours from now\n\n" .
+            "🚀 CLAIM NOW - 2 EASY OPTIONS:\n\n" .
+            "1️⃣ INSTANT CHECKOUT (Recommended):\n%s\n\n" .
+            "2️⃣ BROWSE & SHOP FIRST:\n%s\n\n" .
+            "3️⃣ OR ACTIVATE ON ORIGINAL PAGE:\n%s\n\n" .
+            "💡 PRO TIP: Use option 1 for fastest checkout - your discount will be automatically applied!\n\n" .
+            "⚠️ LIMITED TIME: This exclusive offer expires in 24 hours. Don't miss out!\n\n" .
+            "Questions? Reply to this email for instant support.\n\n" .
+            "If you didn't request this, please ignore this email.", 'wc-fomo-discount'),
+            $coupon_code,
+            $discount_text,
+            $checkout_url,
+            $shop_url,
             $verification_url
         );
         
@@ -323,6 +371,8 @@ class Frontend_Handler {
     public function ajax_verify_email() {
         $token = sanitize_text_field($_GET['wcfd_verify'] ?? '');
         $email = sanitize_email($_GET['email'] ?? '');
+        $redirect_to = urldecode($_GET['redirect_to'] ?? '');
+        $autologin_token = sanitize_text_field($_GET['wcfd_autologin'] ?? '');
         
         if (empty($token) || empty($email)) {
             wp_die(__('Invalid verification link', 'wc-fomo-discount'));
@@ -352,7 +402,49 @@ class Frontend_Handler {
             wp_die($result->get_error_message());
         }
         
-        // Verification is handled within claim_discount method
+        // Handle auto-login if token provided
+        if (!empty($autologin_token) && !is_user_logged_in()) {
+            $this->auto_login_user($email, $autologin_token);
+        }
+        
+        // Mark verification as completed
+        $wpdb->update(
+            $wpdb->prefix . 'wcfd_email_verifications',
+            ['verified_at' => current_time('mysql')],
+            ['id' => $verification->id]
+        );
+        
+        // Get the coupon code for display
+        $coupon_code = $verification->coupon_code;
+        
+        // Create success message
+        $campaign = $this->campaign_manager->get_campaign($verification->campaign_id);
+        $success_message = sprintf(
+            __('Email verified successfully! Your discount code %s is now active and ready to use.', 'wc-fomo-discount'),
+            '<strong>' . $coupon_code . '</strong>'
+        );
+        
+        // Determine where to redirect
+        if (!empty($redirect_to) && filter_var($redirect_to, FILTER_VALIDATE_URL)) {
+            // Add success parameters to the redirect URL
+            $redirect_url = add_query_arg([
+                'wcfd_verified' => '1',
+                'wcfd_code' => $coupon_code,
+                'wcfd_campaign' => $verification->campaign_id,
+                'wcfd_message' => urlencode($success_message)
+            ], $redirect_to);
+        } else {
+            // Fallback to home with success message
+            $redirect_url = add_query_arg([
+                'wcfd_verified' => '1',
+                'wcfd_code' => $coupon_code,
+                'wcfd_message' => urlencode($success_message)
+            ], home_url());
+        }
+        
+        // Redirect back to the original page with success message
+        wp_redirect($redirect_url);
+        exit;
     }
     
     /**
@@ -404,6 +496,195 @@ class Frontend_Handler {
         
         wp_send_json_success([
             'message' => __('Thanks! You\'ve been added to the waitlist and will be notified when new codes are available.', 'wc-fomo-discount')
+        ]);
+    }
+    
+    /**
+     * Create or get user account
+     */
+    private function create_or_get_user($email) {
+        $user = get_user_by('email', $email);
+        
+        if ($user) {
+            return $user->ID;
+        }
+        
+        // Create new user account
+        $username = $this->generate_username_from_email($email);
+        $password = wp_generate_password();
+        
+        $user_id = wp_create_user($username, $password, $email);
+        
+        if (is_wp_error($user_id)) {
+            $this->logger->error('Failed to create user account', [
+                'email' => $email,
+                'error' => $user_id->get_error_message()
+            ]);
+            return false;
+        }
+        
+        // Set user role to customer
+        $user = new \WP_User($user_id);
+        $user->set_role('customer');
+        
+        // Log the account creation
+        $this->logger->info('Created new user account for FOMO discount', [
+            'user_id' => $user_id,
+            'email' => $email
+        ]);
+        
+        return $user_id;
+    }
+    
+    /**
+     * Generate username from email
+     */
+    private function generate_username_from_email($email) {
+        $base_username = sanitize_user(substr($email, 0, strpos($email, '@')));
+        $username = $base_username;
+        $counter = 1;
+        
+        while (username_exists($username)) {
+            $username = $base_username . $counter;
+            $counter++;
+        }
+        
+        return $username;
+    }
+    
+    /**
+     * Handle auto-login from email links
+     */
+    public function handle_autologin() {
+        if (!isset($_GET['wcfd_autologin'])) {
+            return;
+        }
+        
+        $login_token = sanitize_text_field($_GET['wcfd_autologin']);
+        $email = sanitize_email($_GET['email'] ?? '');
+        
+        if (empty($login_token) || empty($email)) {
+            return;
+        }
+        
+        // Find user with this login token
+        $users = get_users([
+            'meta_key' => 'wcfd_autologin_token',
+            'meta_value' => $login_token,
+            'number' => 1
+        ]);
+        
+        if (empty($users)) {
+            return;
+        }
+        
+        $user = $users[0];
+        
+        // Check if token is still valid
+        $expires = get_user_meta($user->ID, 'wcfd_autologin_expires', true);
+        if (!$expires || $expires < time()) {
+            delete_user_meta($user->ID, 'wcfd_autologin_token');
+            delete_user_meta($user->ID, 'wcfd_autologin_expires');
+            return;
+        }
+        
+        // Verify email matches
+        if ($user->user_email !== $email) {
+            return;
+        }
+        
+        // Log the user in
+        wp_clear_auth_cookie();
+        wp_set_current_user($user->ID);
+        wp_set_auth_cookie($user->ID, true);
+        
+        // Clean up the login token (one-time use)
+        delete_user_meta($user->ID, 'wcfd_autologin_token');
+        delete_user_meta($user->ID, 'wcfd_autologin_expires');
+        
+        $this->logger->info('Auto-login successful', [
+            'user_id' => $user->ID,
+            'email' => $email
+        ]);
+    }
+    
+    /**
+     * Auto-login user with token
+     */
+    private function auto_login_user($email, $login_token) {
+        $users = get_users([
+            'meta_key' => 'wcfd_autologin_token',
+            'meta_value' => $login_token,
+            'number' => 1
+        ]);
+        
+        if (empty($users)) {
+            return false;
+        }
+        
+        $user = $users[0];
+        
+        // Verify email matches
+        if ($user->user_email !== $email) {
+            return false;
+        }
+        
+        // Check if token is still valid
+        $expires = get_user_meta($user->ID, 'wcfd_autologin_expires', true);
+        if (!$expires || $expires < time()) {
+            return false;
+        }
+        
+        // Log the user in
+        wp_clear_auth_cookie();
+        wp_set_current_user($user->ID);
+        wp_set_auth_cookie($user->ID, true);
+        
+        // Clean up the login token (one-time use)
+        delete_user_meta($user->ID, 'wcfd_autologin_token');
+        delete_user_meta($user->ID, 'wcfd_autologin_expires');
+        
+        return true;
+    }
+    
+    /**
+     * Handle coupon application from email links
+     */
+    public function handle_coupon_application() {
+        if (!isset($_GET['wcfd_apply_coupon']) || !isset($_GET['wcfd_token'])) {
+            return;
+        }
+        
+        $coupon_code = sanitize_text_field($_GET['wcfd_apply_coupon']);
+        $token = sanitize_text_field($_GET['wcfd_token']);
+        
+        // Verify the token exists in our verification table
+        global $wpdb;
+        $verification = $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM {$wpdb->prefix}wcfd_email_verifications 
+            WHERE verification_token = %s AND coupon_code = %s",
+            $token, $coupon_code
+        ));
+        
+        if (!$verification) {
+            return; // Invalid token
+        }
+        
+        // Add to cart if there are products or redirect to shop
+        if (WC()->cart && !WC()->cart->is_empty()) {
+            // Apply coupon to existing cart
+            WC()->cart->apply_coupon($coupon_code);
+            wc_add_notice(sprintf(__('Discount code %s has been applied!', 'wc-fomo-discount'), $coupon_code), 'success');
+        } else {
+            // Store coupon for later application
+            WC()->session->set('wcfd_pending_coupon', $coupon_code);
+            wc_add_notice(sprintf(__('Your discount code %s is ready! Add items to your cart to apply it.', 'wc-fomo-discount'), $coupon_code), 'notice');
+        }
+        
+        $this->logger->info('Coupon applied via email link', [
+            'coupon_code' => $coupon_code,
+            'user_id' => get_current_user_id(),
+            'verification_id' => $verification->id
         ]);
     }
 }
