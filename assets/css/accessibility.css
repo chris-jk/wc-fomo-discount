@@ -1,0 +1,332 @@
+/**
+ * Accessibility Enhancements for WC FOMO Discount
+ * 
+ * @package WC_Fomo_Discount
+ * @version 2.0.0
+ */
+
+/* Focus states for keyboard navigation */
+.wcfd-discount-widget *:focus {
+    outline: 2px solid #005cee;
+    outline-offset: 2px;
+    box-shadow: 0 0 0 2px rgba(0, 92, 238, 0.2);
+}
+
+.wcfd-discount-widget *:focus:not(:focus-visible) {
+    outline: none;
+    box-shadow: none;
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+    .wcfd-discount-widget {
+        border: 2px solid;
+        background: Canvas;
+        color: CanvasText;
+    }
+    
+    .wcfd-claim-btn {
+        border: 2px solid ButtonText;
+        background: ButtonFace;
+        color: ButtonText;
+    }
+    
+    .wcfd-claim-btn:hover,
+    .wcfd-claim-btn:focus {
+        background: Highlight;
+        color: HighlightText;
+    }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+    .wcfd-discount-widget *,
+    .wcfd-discount-widget *::before,
+    .wcfd-discount-widget *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+    
+    .wcfd-pulse {
+        animation: none !important;
+    }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+    .wcfd-discount-widget {
+        background: #1a1a1a;
+        color: #ffffff;
+        border-color: #404040;
+    }
+    
+    .wcfd-claim-btn {
+        background: #0073aa;
+        border-color: #0073aa;
+        color: #ffffff;
+    }
+    
+    .wcfd-claim-btn:hover,
+    .wcfd-claim-btn:focus {
+        background: #005a87;
+        border-color: #005a87;
+    }
+    
+    .wcfd-error {
+        background: #dc3545;
+        color: #ffffff;
+    }
+    
+    .wcfd-success {
+        background: #28a745;
+        color: #ffffff;
+    }
+}
+
+/* Screen reader only content */
+.wcfd-sr-only {
+    position: absolute !important;
+    width: 1px !important;
+    height: 1px !important;
+    padding: 0 !important;
+    margin: -1px !important;
+    overflow: hidden !important;
+    clip: rect(0, 0, 0, 0) !important;
+    white-space: nowrap !important;
+    border: 0 !important;
+}
+
+/* Skip link for screen readers */
+.wcfd-skip-link {
+    position: absolute;
+    left: -9999px;
+    z-index: 999999;
+    padding: 8px 16px;
+    background: #000;
+    color: #fff;
+    text-decoration: none;
+}
+
+.wcfd-skip-link:focus {
+    left: 6px;
+    top: 7px;
+}
+
+/* Error announcements */
+.wcfd-error[role="alert"] {
+    position: relative;
+}
+
+.wcfd-error[role="alert"]::before {
+    content: "⚠ ";
+    font-weight: bold;
+    margin-right: 0.5em;
+}
+
+/* Loading states */
+.wcfd-claim-btn[aria-busy="true"] {
+    position: relative;
+    color: transparent;
+}
+
+.wcfd-claim-btn[aria-busy="true"]::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 16px;
+    height: 16px;
+    margin-top: -8px;
+    margin-left: -8px;
+    border: 2px solid currentColor;
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: wcfd-spinner 0.8s linear infinite;
+}
+
+@keyframes wcfd-spinner {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Tooltip improvements */
+.wcfd-tooltip {
+    position: relative;
+    display: inline-block;
+}
+
+.wcfd-tooltip[aria-describedby] {
+    cursor: help;
+}
+
+.wcfd-tooltip-text {
+    position: absolute;
+    z-index: 1000;
+    bottom: 125%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #333;
+    color: #fff;
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s;
+}
+
+.wcfd-tooltip:hover .wcfd-tooltip-text,
+.wcfd-tooltip:focus .wcfd-tooltip-text {
+    opacity: 1;
+}
+
+.wcfd-tooltip-text::after {
+    content: "";
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 5px solid transparent;
+    border-top-color: #333;
+}
+
+/* Form improvements */
+.wcfd-form-group {
+    margin-bottom: 1rem;
+}
+
+.wcfd-form-label {
+    display: block;
+    margin-bottom: 0.5rem;
+    font-weight: bold;
+}
+
+.wcfd-form-input {
+    width: 100%;
+    padding: 0.75rem;
+    border: 2px solid #ddd;
+    border-radius: 4px;
+    font-size: 16px; /* Prevents zoom on iOS */
+}
+
+.wcfd-form-input:focus {
+    border-color: #005cee;
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(0, 92, 238, 0.2);
+}
+
+.wcfd-form-input[aria-invalid="true"] {
+    border-color: #dc3545;
+}
+
+.wcfd-form-input[aria-invalid="true"]:focus {
+    box-shadow: 0 0 0 2px rgba(220, 53, 69, 0.2);
+}
+
+/* Progress indicators */
+.wcfd-progress {
+    width: 100%;
+    height: 20px;
+    background: #f0f0f0;
+    border-radius: 10px;
+    overflow: hidden;
+    position: relative;
+}
+
+.wcfd-progress-bar {
+    height: 100%;
+    background: linear-gradient(90deg, #28a745, #20c997);
+    transition: width 0.3s ease;
+    position: relative;
+}
+
+.wcfd-progress-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 12px;
+    font-weight: bold;
+    color: #333;
+    z-index: 1;
+}
+
+/* Status indicators */
+.wcfd-status {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+.wcfd-status-success {
+    background: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+
+.wcfd-status-warning {
+    background: #fff3cd;
+    color: #856404;
+    border: 1px solid #ffeaa7;
+}
+
+.wcfd-status-error {
+    background: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+}
+
+.wcfd-status::before {
+    content: "";
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-right: 0.5rem;
+}
+
+.wcfd-status-success::before {
+    background: #28a745;
+}
+
+.wcfd-status-warning::before {
+    background: #ffc107;
+}
+
+.wcfd-status-error::before {
+    background: #dc3545;
+}
+
+/* Mobile accessibility improvements */
+@media (max-width: 768px) {
+    .wcfd-claim-btn {
+        min-height: 44px; /* Minimum touch target size */
+        min-width: 44px;
+        font-size: 16px; /* Prevents zoom on iOS */
+    }
+    
+    .wcfd-form-input {
+        min-height: 44px;
+    }
+}
+
+/* Print styles */
+@media print {
+    .wcfd-discount-widget {
+        background: white !important;
+        color: black !important;
+        box-shadow: none !important;
+        border: 1px solid black !important;
+    }
+    
+    .wcfd-claim-btn {
+        background: white !important;
+        color: black !important;
+        border: 2px solid black !important;
+    }
+}

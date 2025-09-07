@@ -532,7 +532,8 @@ class WC_FOMO_Discount_Generator
             )
         );
 
-        echo '<div class="notice notice-success is-dismissible"><p>' . __('Campaign created successfully!', 'wc-fomo-discount') . '</p></div>';
+        $campaign_id = $wpdb->insert_id;
+        echo '<div class="notice notice-success is-dismissible"><p>' . sprintf(__('Campaign created successfully! ID: %d<br><strong>To display it, add this shortcode to any page/post:</strong><br><code>[fomo_discount id="%d"]</code>', 'wc-fomo-discount'), $campaign_id, $campaign_id) . '</p></div>';
     }
     
     private function validate_scope_ids($input) {

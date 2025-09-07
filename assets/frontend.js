@@ -33,6 +33,9 @@ jQuery(document).ready(function ($) {
         const campaignId = widget.data('campaign-id');
         console.log('WCFD Debug: Found widget for campaign:', campaignId);
 
+        // Initialize accessibility features
+        initializeAccessibility(widget);
+
         // Start real-time updates for this widget
         startRealtimeUpdates(widget, campaignId);
 
@@ -138,8 +141,13 @@ jQuery(document).ready(function ($) {
             return;
         }
 
-        // Disable button and show loading
-        button.prop('disabled', true).text('Processing...');
+        // Disable button and show loading with accessibility
+        button.prop('disabled', true)
+              .attr('aria-busy', 'true')
+              .text('Processing...');
+        
+        // Announce processing to screen readers
+        announceToScreenReader(widget, 'Processing your request, please wait');
 
         // Debug logging
         console.log('Claiming discount:', {
@@ -186,6 +194,9 @@ jQuery(document).ready(function ($) {
                     );
 
                     widget.find('.wcfd-success').fadeIn();
+                    
+                    // Announce success to screen readers
+                    announceToScreenReader(widget, 'Success! Your discount code is ' + response.data.code, 'assertive');
 
                     // Update counter
                     updateCounter(widget, response.data.codes_remaining);
@@ -206,7 +217,9 @@ jQuery(document).ready(function ($) {
                     console.error('Discount claim failed:', response);
                     let errorMsg = response.data || 'Unknown error occurred';
                     showError(widget, errorMsg);
-                    button.prop('disabled', false).text('Get My Code!');
+                    button.prop('disabled', false)
+                          .attr('aria-busy', 'false')
+                          .text('Get My Code!');
                 }
             },
             error: function (xhr, status, error) {
@@ -225,14 +238,30 @@ jQuery(document).ready(function ($) {
                     errorMessage = 'Server error occurred. Please try again later.';
                 }
                 showError(widget, errorMessage);
-                button.prop('disabled', false).text('Get My Code!');
+                button.prop('disabled', false)
+                      .attr('aria-busy', 'false')
+                      .text('Get My Code!');
             }
         });
     }
 
     function showError(widget, message) {
         const errorElement = widget.find('.wcfd-error');
+        
+        // Add ARIA attributes for screen readers
+        errorElement.attr({
+            'role': 'alert',
+            'aria-live': 'assertive'
+        });
+        
         errorElement.text(message).fadeIn();
+        
+        // Announce to screen readers
+        announceToScreenReader(widget, 'Error: ' + message, 'assertive');
+        
+        // Focus management - move focus to error for screen readers
+        errorElement.attr('tabindex', '-1').focus();
+        
         setTimeout(() => {
             errorElement.fadeOut();
         }, CONSTANTS.ERROR_DISPLAY_TIME);
@@ -488,6 +517,102 @@ jQuery(document).ready(function ($) {
                 console.log('WCFD: Auto-apply coupon AJAX error, will try on cart/checkout page');
             }
         });
+    }
+
+    function initializeAccessibility(widget) {
+        console.log('WCFD: Initializing accessibility features');
+        
+        // Add ARIA attributes to the widget
+        widget.attr({
+            'role': 'region',
+            'aria-label': 'FOMO Discount Widget',
+            'aria-live': 'polite'
+        });
+
+        // Add skip link for screen readers
+        const skipLink = $('<a href="#" class="wcfd-skip-link wcfd-sr-only">Skip to main content</a>');
+        widget.prepend(skipLink);
+
+        // Enhance form elements
+        const emailInput = widget.find('.wcfd-email');
+        if (emailInput.length) {
+            emailInput.attr({
+                'aria-required': 'true',
+                'aria-describedby': 'wcfd-email-help-' + widget.data('campaign-id'),
+                'autocomplete': 'email',
+                'inputmode': 'email'
+            });
+
+            // Add help text
+            const helpText = $('<div id="wcfd-email-help-' + widget.data('campaign-id') + '" class="wcfd-sr-only">Enter your email address to claim your discount code</div>');
+            emailInput.after(helpText);
+        }
+
+        // Enhance button
+        const claimButton = widget.find('.wcfd-claim-btn');
+        if (claimButton.length) {
+            claimButton.attr({
+                'type': 'button',
+                'aria-describedby': 'wcfd-button-help-' + widget.data('campaign-id')
+            });
+
+            const buttonHelp = $('<div id="wcfd-button-help-' + widget.data('campaign-id') + '" class="wcfd-sr-only">Click to claim your exclusive discount code</div>');
+            claimButton.after(buttonHelp);
+        }
+
+        // Add keyboard navigation
+        widget.on('keydown', function(e) {
+            // ESC key to close any modals/alerts
+            if (e.key === 'Escape') {
+                widget.find('.wcfd-error').fadeOut();
+                widget.find('.wcfd-success').fadeOut();
+            }
+            
+            // Enter key on focused elements
+            if (e.key === 'Enter') {
+                const focused = $(e.target);
+                if (focused.is('.wcfd-claim-btn') || focused.is('.wcfd-email')) {
+                    e.preventDefault();
+                    claimButton.click();
+                }
+            }
+        });
+
+        // Add focus management
+        widget.find('button, input, a').on('focus', function() {
+            $(this).addClass('wcfd-focused');
+        }).on('blur', function() {
+            $(this).removeClass('wcfd-focused');
+        });
+
+        // Announce important changes
+        const announcer = $('<div aria-live="assertive" aria-atomic="true" class="wcfd-sr-only" role="status"></div>');
+        widget.append(announcer);
+        widget.data('announcer', announcer);
+
+        // Progress indicator
+        const progressContainer = widget.find('.wcfd-codes-remaining');
+        if (progressContainer.length) {
+            progressContainer.attr({
+                'role': 'progressbar',
+                'aria-label': 'Discount codes remaining'
+            });
+        }
+
+        console.log('WCFD: Accessibility features initialized');
+    }
+
+    function announceToScreenReader(widget, message, priority = 'polite') {
+        const announcer = widget.data('announcer');
+        if (announcer) {
+            announcer.attr('aria-live', priority);
+            announcer.text(message);
+            
+            // Clear after a short delay to allow for re-announcements
+            setTimeout(() => {
+                announcer.text('');
+            }, 1000);
+        }
     }
 
     function showWaitlistForm(widget, campaignId) {
