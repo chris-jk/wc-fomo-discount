@@ -1,0 +1,413 @@
+/* assets/frontend.css */
+
+.wcfd-discount-widget {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 15px;
+    padding: 30px;
+    margin: 20px 0;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+    color: white;
+    position: relative;
+    overflow: hidden;
+    max-width: 500px;
+    animation: slideIn 0.5s ease-out;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.wcfd-discount-widget::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    right: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+    animation: rotate 30s linear infinite;
+}
+
+@keyframes rotate {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.wcfd-header {
+    position: relative;
+    z-index: 1;
+    text-align: center;
+    margin-bottom: 25px;
+}
+
+.wcfd-header h3 {
+    font-size: 24px;
+    margin: 0 0 15px 0;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.wcfd-discount-value {
+    font-size: 48px;
+    font-weight: 900;
+    text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+    animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+}
+
+.wcfd-counter {
+    background: rgba(255,255,255,0.2);
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 25px;
+    backdrop-filter: blur(10px);
+    position: relative;
+    z-index: 1;
+}
+
+.wcfd-codes-left {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.wcfd-count {
+    font-size: 36px;
+    font-weight: bold;
+    background: white;
+    color: #764ba2;
+    padding: 5px 15px;
+    border-radius: 8px;
+    display: inline-block;
+    min-width: 60px;
+    text-align: center;
+    transition: transform 0.3s ease;
+}
+
+.wcfd-count-updated {
+    transform: scale(1.1);
+    animation: countUpdate 0.6s ease-out;
+}
+
+@keyframes countUpdate {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.15); background: #ff6b6b; color: white; }
+    100% { transform: scale(1); }
+}
+
+.wcfd-label {
+    font-size: 18px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.wcfd-urgency {
+    text-align: center;
+    font-size: 14px;
+    opacity: 0.9;
+    animation: blink 3s ease-in-out infinite;
+}
+
+@keyframes blink {
+    0%, 100% { opacity: 0.9; }
+    50% { opacity: 1; }
+}
+
+.wcfd-claim-form {
+    position: relative;
+    z-index: 1;
+}
+
+.wcfd-email {
+    width: 100%;
+    padding: 15px;
+    border: none;
+    border-radius: 8px;
+    font-size: 16px;
+    margin-bottom: 15px;
+    box-sizing: border-box;
+}
+
+.wcfd-claim-btn {
+    width: 100%;
+    padding: 18px;
+    background: white;
+    color: #764ba2;
+    border: none;
+    border-radius: 8px;
+    font-size: 18px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+.wcfd-claim-btn:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+}
+
+.wcfd-claim-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.wcfd-success {
+    background: rgba(255,255,255,0.2);
+    border-radius: 10px;
+    padding: 20px;
+    text-align: center;
+    backdrop-filter: blur(10px);
+    position: relative;
+    z-index: 1;
+}
+
+.wcfd-success h4 {
+    font-size: 24px;
+    margin: 0 0 15px 0;
+}
+
+.wcfd-code {
+    display: inline-block;
+    background: white;
+    color: #764ba2;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-size: 24px;
+    font-weight: bold;
+    letter-spacing: 2px;
+    margin: 10px 0;
+}
+
+.wcfd-copy-btn {
+    background: rgba(255,255,255,0.3);
+    border: 2px solid white;
+    color: white;
+    padding: 10px 20px;
+    border-radius: 5px;
+    cursor: pointer;
+    margin-top: 10px;
+    transition: all 0.3s ease;
+}
+
+.wcfd-copy-btn:hover {
+    background: white;
+    color: #764ba2;
+}
+
+.wcfd-expiry {
+    margin-top: 15px;
+    font-size: 14px;
+}
+
+.wcfd-error {
+    background: #ff4444;
+    color: white;
+    padding: 15px;
+    border-radius: 8px;
+    margin-top: 15px;
+    text-align: center;
+    position: relative;
+    z-index: 1;
+}
+
+.wcfd-sold-out {
+    text-align: center;
+    font-size: 20px;
+    font-weight: bold;
+    padding: 20px;
+    background: rgba(255,255,255,0.2);
+    border-radius: 10px;
+    backdrop-filter: blur(10px);
+}
+
+/* Pulse effect for low inventory */
+.wcfd-pulse {
+    animation: urgentPulse 0.5s ease-out;
+}
+
+@keyframes urgentPulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.02); box-shadow: 0 0 30px rgba(255,255,255,0.5); }
+    100% { transform: scale(1); }
+}
+
+/* Applied notification */
+.wcfd-applied-notification {
+    position: fixed;
+    top: 50px;
+    right: 20px;
+    background: #4CAF50;
+    color: white;
+    padding: 20px 30px;
+    border-radius: 8px;
+    box-shadow: 0 5px 20px rgba(0,0,0,0.2);
+    z-index: 9999;
+    display: none;
+    font-size: 16px;
+    font-weight: bold;
+}
+
+/* Mobile responsiveness */
+@media (max-width: 600px) {
+    .wcfd-discount-widget {
+        padding: 20px;
+    }
+    
+    .wcfd-discount-value {
+        font-size: 36px;
+    }
+    
+    .wcfd-count {
+        font-size: 28px;
+    }
+    
+    .wcfd-claim-btn {
+        font-size: 16px;
+        padding: 15px;
+    }
+}
+
+/* Admin styles */
+.wcfd-admin-container {
+    display: flex;
+    gap: 30px;
+    margin-top: 20px;
+}
+
+.wcfd-create-campaign,
+.wcfd-campaigns-list {
+    background: white;
+    padding: 20px;
+    border-radius: 5px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.wcfd-create-campaign {
+    flex: 1;
+    max-width: 500px;
+}
+
+.wcfd-campaigns-list {
+    flex: 2;
+}
+
+/* Social Sharing Styles */
+.wcfd-social-share {
+    margin-top: 20px;
+    padding: 15px;
+    background: rgba(255,255,255,0.1);
+    border-radius: 8px;
+    text-align: center;
+    position: relative;
+    z-index: 1;
+}
+
+.wcfd-social-share h4 {
+    margin: 0 0 15px 0;
+    font-size: 16px;
+    color: rgba(255,255,255,0.9);
+}
+
+.wcfd-social-buttons {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.wcfd-social-btn {
+    padding: 10px 15px;
+    border: none;
+    border-radius: 5px;
+    color: white;
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    min-width: 80px;
+    justify-content: center;
+}
+
+.wcfd-social-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+}
+
+.wcfd-social-btn.facebook {
+    background: #3b5998;
+}
+
+.wcfd-social-btn.twitter {
+    background: #1da1f2;
+}
+
+.wcfd-social-btn.whatsapp {
+    background: #25d366;
+}
+
+.wcfd-social-btn.telegram {
+    background: #0088cc;
+}
+
+.wcfd-social-btn.copy {
+    background: rgba(255,255,255,0.2);
+    border: 1px solid rgba(255,255,255,0.3);
+}
+
+@media (max-width: 600px) {
+    .wcfd-social-buttons {
+        flex-direction: column;
+        align-items: center;
+    }
+    
+    .wcfd-social-btn {
+        width: 200px;
+    }
+}
+
+/* Email Verification Styles */
+.wcfd-verification-sent {
+    background: rgba(255,255,255,0.2);
+    border-radius: 10px;
+    padding: 20px;
+    text-align: center;
+    backdrop-filter: blur(10px);
+    position: relative;
+    z-index: 1;
+}
+
+.wcfd-verification-sent h4 {
+    font-size: 20px;
+    margin: 0 0 15px 0;
+    color: #4CAF50;
+}
+
+.wcfd-verification-sent p {
+    margin: 10px 0;
+    line-height: 1.5;
+}
+
+.wcfd-verification-sent small {
+    opacity: 0.8;
+    font-style: italic;
+}
