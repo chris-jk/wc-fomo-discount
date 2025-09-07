@@ -1131,10 +1131,26 @@ class WC_FOMO_Discount_Generator
             'from_email' => get_option('admin_email'),
             'from_name' => get_bloginfo('name')
         ));
+        // Check current email method
+        $using_smtp = !empty($smtp_settings['enabled']) && !empty($smtp_settings['host']) && !empty($smtp_settings['username']);
         ?>
         <div class="wrap">
             <h1>Email Settings</h1>
             <p>Configure SMTP settings to ensure reliable email delivery and prevent emails from being flagged as spam.</p>
+            
+            <!-- Current Status -->
+            <div class="wcfd-email-status" style="margin: 20px 0; padding: 15px; border-radius: 5px; <?php echo $using_smtp ? 'background: #d4edda; border: 1px solid #c3e6cb;' : 'background: #fff3cd; border: 1px solid #ffeaa7;'; ?>">
+                <h3 style="margin: 0 0 10px 0; color: <?php echo $using_smtp ? '#155724' : '#856404'; ?>;">
+                    <?php echo $using_smtp ? '✅ Current Status: SMTP Configured' : '⚠️ Current Status: Using WordPress Default Mail'; ?>
+                </h3>
+                <p style="margin: 0; color: <?php echo $using_smtp ? '#155724' : '#856404'; ?>;">
+                    <?php if ($using_smtp): ?>
+                        Emails are being sent via SMTP (<?php echo esc_html($smtp_settings['host']); ?>) for reliable delivery.
+                    <?php else: ?>
+                        Emails are being sent using WordPress's default mail() function. <strong>This may result in emails being flagged as spam or not delivered.</strong> Configure SMTP below for better deliverability.
+                    <?php endif; ?>
+                </p>
+            </div>
             
             <form method="post" action="">
                 <?php wp_nonce_field('wcfd_save_email_settings', 'wcfd_email_nonce'); ?>
@@ -1312,21 +1328,47 @@ class WC_FOMO_Discount_Generator
     
     public function send_test_email() {
         $to = get_option('admin_email');
-        $subject = 'FOMO Discount Generator - SMTP Test Email';
+        $subject = 'FOMO Discount Generator - Test Email';
+        $smtp_settings = get_option('wcfd_smtp_settings', array());
+        $using_smtp = !empty($smtp_settings['enabled']) && !empty($smtp_settings['host']);
+        
         $message = "
-        <h2>SMTP Test Email</h2>
-        <p>If you receive this email, your SMTP configuration is working correctly!</p>
+        <h2>Test Email from FOMO Discount Generator</h2>
+        <p>If you receive this email, your email configuration is working!</p>
+        <p><strong>Email Method:</strong> " . ($using_smtp ? 'SMTP' : 'WordPress default mail()') . "</p>
         <p><strong>Sent:</strong> " . date('Y-m-d H:i:s') . "</p>
         <p><strong>From:</strong> WooCommerce FOMO Discount Generator</p>
+        " . (!$using_smtp ? '<p style=\"color: #d63384;\"><strong>⚠️ Warning:</strong> Using WordPress default mail() function. Emails may be flagged as spam. Configure SMTP for better deliverability.</p>' : '') . "
         ";
         
         $headers = array('Content-Type: text/html; charset=UTF-8');
         
         if (wp_mail($to, $subject, $message, $headers)) {
-            echo '<div class="notice notice-success"><p>Test email sent successfully to ' . esc_html($to) . '! Check your inbox.</p></div>';
+            $method = $using_smtp ? 'SMTP' : 'WordPress default mail()';
+            echo '<div class="notice notice-success"><p>Test email sent successfully to ' . esc_html($to) . ' using ' . $method . '! Check your inbox.</p></div>';
         } else {
-            echo '<div class="notice notice-error"><p>Failed to send test email. Please check your SMTP settings.</p></div>';
+            echo '<div class="notice notice-error"><p>Failed to send test email. Please check your email configuration.</p></div>';
         }
+    }
+    
+    public function show_wp_mail_notice() {
+        // Only show on FOMO discount pages and avoid duplicate notices
+        if (!isset($_GET['page']) || strpos($_GET['page'], 'wcfd') === false) {
+            return;
+        }
+        
+        // Check if we already showed this notice recently
+        if (get_transient('wcfd_wp_mail_notice_shown')) {
+            return;
+        }
+        
+        set_transient('wcfd_wp_mail_notice_shown', true, HOUR_IN_SECONDS);
+        
+        echo '<div class="notice notice-warning is-dismissible">
+            <p><strong>⚠️ Email Delivery Warning:</strong> FOMO Discount Generator is using WordPress\'s default mail() function. 
+            Emails may be flagged as spam or not delivered reliably. 
+            <a href="' . admin_url('admin.php?page=wcfd-email-settings') . '">Configure SMTP settings</a> for better deliverability.</p>
+        </div>';
     }
 }
 
