@@ -29,6 +29,7 @@ class WCFD_Auto_Updater {
         add_filter('plugins_api', array($this, 'plugin_popup'), 10, 3);
         add_filter('upgrader_post_install', array($this, 'after_install'), 10, 3);
         add_action('upgrader_process_complete', array($this, 'purge_updater_cache'), 10, 2);
+        add_filter('upgrader_pre_download', array($this, 'upgrader_pre_download'), 10, 4);
     }
     
     public function check_for_update($transient) {
@@ -100,6 +101,24 @@ class WCFD_Auto_Updater {
             delete_transient('wcfd_remote_readme');
             delete_transient('wcfd_remote_changelog');
         }
+    }
+    
+    public function upgrader_pre_download($reply, $package, $upgrader, $hook_extra = null) {
+        // Only handle our plugin's downloads
+        if (!empty($this->github_token) && strpos($package, $this->github_repo) !== false) {
+            $temp_file = download_url($package, 300, false, array(
+                'headers' => array(
+                    'Authorization' => 'token ' . $this->github_token,
+                    'Accept' => 'application/vnd.github.v3+json'
+                )
+            ));
+            
+            if (!is_wp_error($temp_file)) {
+                return $temp_file;
+            }
+        }
+        
+        return $reply;
     }
     
     private function get_remote_version() {
