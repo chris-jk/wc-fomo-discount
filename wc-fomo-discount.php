@@ -1113,6 +1113,221 @@ class WC_FOMO_Discount_Generator
         </style>
         <?php
     }
+    
+    public function email_settings_page() {
+        // Handle form submission
+        if (isset($_POST['wcfd_save_email_settings'])) {
+            $this->save_email_settings($_POST);
+        }
+        
+        // Get current settings
+        $smtp_settings = get_option('wcfd_smtp_settings', array(
+            'enabled' => false,
+            'host' => '',
+            'port' => 587,
+            'username' => '',
+            'password' => '',
+            'encryption' => 'tls',
+            'from_email' => get_option('admin_email'),
+            'from_name' => get_bloginfo('name')
+        ));
+        ?>
+        <div class="wrap">
+            <h1>Email Settings</h1>
+            <p>Configure SMTP settings to ensure reliable email delivery and prevent emails from being flagged as spam.</p>
+            
+            <form method="post" action="">
+                <?php wp_nonce_field('wcfd_save_email_settings', 'wcfd_email_nonce'); ?>
+                
+                <table class="form-table">
+                    <tr>
+                        <th scope="row">Enable SMTP</th>
+                        <td>
+                            <label>
+                                <input type="checkbox" name="smtp_enabled" value="1" <?php checked($smtp_settings['enabled']); ?> />
+                                Use SMTP for sending emails (recommended)
+                            </label>
+                            <p class="description">Enable this to use SMTP instead of PHP's mail() function for better deliverability.</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">SMTP Host</th>
+                        <td>
+                            <input type="text" name="smtp_host" value="<?php echo esc_attr($smtp_settings['host']); ?>" class="regular-text" placeholder="smtp.gmail.com" />
+                            <p class="description">Your SMTP server hostname (e.g., smtp.gmail.com, smtp.mailgun.org)</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">SMTP Port</th>
+                        <td>
+                            <input type="number" name="smtp_port" value="<?php echo esc_attr($smtp_settings['port']); ?>" class="small-text" />
+                            <p class="description">Common ports: 587 (TLS), 465 (SSL), 25 (unsecured)</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Encryption</th>
+                        <td>
+                            <select name="smtp_encryption">
+                                <option value="none" <?php selected($smtp_settings['encryption'], 'none'); ?>>None</option>
+                                <option value="ssl" <?php selected($smtp_settings['encryption'], 'ssl'); ?>>SSL</option>
+                                <option value="tls" <?php selected($smtp_settings['encryption'], 'tls'); ?>>TLS (recommended)</option>
+                            </select>
+                            <p class="description">Choose the encryption method supported by your SMTP provider.</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">SMTP Username</th>
+                        <td>
+                            <input type="text" name="smtp_username" value="<?php echo esc_attr($smtp_settings['username']); ?>" class="regular-text" placeholder="your-email@gmail.com" />
+                            <p class="description">Your SMTP username (usually your email address)</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">SMTP Password</th>
+                        <td>
+                            <input type="password" name="smtp_password" value="<?php echo esc_attr($smtp_settings['password']); ?>" class="regular-text" placeholder="<?php echo $smtp_settings['password'] ? '••••••••' : 'Your SMTP password'; ?>" />
+                            <p class="description">Your SMTP password or app-specific password</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">From Email</th>
+                        <td>
+                            <input type="email" name="from_email" value="<?php echo esc_attr($smtp_settings['from_email']); ?>" class="regular-text" />
+                            <p class="description">Email address that emails will be sent from</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">From Name</th>
+                        <td>
+                            <input type="text" name="from_name" value="<?php echo esc_attr($smtp_settings['from_name']); ?>" class="regular-text" />
+                            <p class="description">Name that will appear in the "From" field</p>
+                        </td>
+                    </tr>
+                </table>
+                
+                <div class="wcfd-smtp-providers" style="margin-top: 20px; padding: 20px; background: #f9f9f9; border-radius: 5px;">
+                    <h3>Popular SMTP Provider Settings</h3>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 15px;">
+                        <div>
+                            <strong>Gmail:</strong><br>
+                            Host: smtp.gmail.com<br>
+                            Port: 587<br>
+                            Encryption: TLS<br>
+                            <em>Note: Use App Password, not regular password</em>
+                        </div>
+                        <div>
+                            <strong>Outlook/Hotmail:</strong><br>
+                            Host: smtp-mail.outlook.com<br>
+                            Port: 587<br>
+                            Encryption: TLS
+                        </div>
+                        <div>
+                            <strong>SendGrid:</strong><br>
+                            Host: smtp.sendgrid.net<br>
+                            Port: 587<br>
+                            Encryption: TLS<br>
+                            Username: apikey
+                        </div>
+                        <div>
+                            <strong>Mailgun:</strong><br>
+                            Host: smtp.mailgun.org<br>
+                            Port: 587<br>
+                            Encryption: TLS
+                        </div>
+                    </div>
+                </div>
+                
+                <p class="submit">
+                    <input type="submit" name="wcfd_save_email_settings" class="button-primary" value="Save Email Settings" />
+                    <input type="submit" name="wcfd_test_email" class="button-secondary" value="Send Test Email" style="margin-left: 10px;" />
+                </p>
+            </form>
+        </div>
+        <?php
+    }
+    
+    public function save_email_settings($post_data) {
+        // Verify nonce
+        if (!wp_verify_nonce($post_data['wcfd_email_nonce'], 'wcfd_save_email_settings')) {
+            wp_die(__('Security check failed', 'wc-fomo-discount'));
+        }
+        
+        // Handle test email
+        if (isset($post_data['wcfd_test_email'])) {
+            $this->send_test_email();
+            return;
+        }
+        
+        // Save SMTP settings
+        $smtp_settings = array(
+            'enabled' => isset($post_data['smtp_enabled']),
+            'host' => sanitize_text_field($post_data['smtp_host']),
+            'port' => intval($post_data['smtp_port']),
+            'username' => sanitize_text_field($post_data['smtp_username']),
+            'password' => sanitize_text_field($post_data['smtp_password']),
+            'encryption' => sanitize_text_field($post_data['smtp_encryption']),
+            'from_email' => sanitize_email($post_data['from_email']),
+            'from_name' => sanitize_text_field($post_data['from_name'])
+        );
+        
+        update_option('wcfd_smtp_settings', $smtp_settings);
+        
+        echo '<div class="notice notice-success"><p>Email settings saved successfully!</p></div>';
+    }
+    
+    public function configure_smtp($phpmailer) {
+        $smtp_settings = get_option('wcfd_smtp_settings', array());
+        
+        // Only configure SMTP if enabled and required fields are filled
+        if (empty($smtp_settings['enabled']) || empty($smtp_settings['host']) || empty($smtp_settings['username'])) {
+            // Show admin notice about using WP mail
+            add_action('admin_notices', array($this, 'show_wp_mail_notice'));
+            return;
+        }
+        
+        $phpmailer->isSMTP();
+        $phpmailer->Host = $smtp_settings['host'];
+        $phpmailer->Port = $smtp_settings['port'];
+        $phpmailer->Username = $smtp_settings['username'];
+        $phpmailer->Password = $smtp_settings['password'];
+        $phpmailer->SMTPAuth = true;
+        
+        // Set encryption
+        if ($smtp_settings['encryption'] === 'ssl') {
+            $phpmailer->SMTPSecure = 'ssl';
+        } elseif ($smtp_settings['encryption'] === 'tls') {
+            $phpmailer->SMTPSecure = 'tls';
+        }
+        
+        // Set from email and name
+        if (!empty($smtp_settings['from_email'])) {
+            $phpmailer->setFrom($smtp_settings['from_email'], $smtp_settings['from_name']);
+        }
+        
+        // Enable debug for testing (only in wp-config.php debug mode)
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            $phpmailer->SMTPDebug = 1;
+        }
+    }
+    
+    public function send_test_email() {
+        $to = get_option('admin_email');
+        $subject = 'FOMO Discount Generator - SMTP Test Email';
+        $message = "
+        <h2>SMTP Test Email</h2>
+        <p>If you receive this email, your SMTP configuration is working correctly!</p>
+        <p><strong>Sent:</strong> " . date('Y-m-d H:i:s') . "</p>
+        <p><strong>From:</strong> WooCommerce FOMO Discount Generator</p>
+        ";
+        
+        $headers = array('Content-Type: text/html; charset=UTF-8');
+        
+        if (wp_mail($to, $subject, $message, $headers)) {
+            echo '<div class="notice notice-success"><p>Test email sent successfully to ' . esc_html($to) . '! Check your inbox.</p></div>';
+        } else {
+            echo '<div class="notice notice-error"><p>Failed to send test email. Please check your SMTP settings.</p></div>';
+        }
+    }
 }
 
 // Initialize plugin

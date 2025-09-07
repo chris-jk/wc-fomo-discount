@@ -11,6 +11,7 @@ Generate limited quantity, time-limited discount codes with real-time countdown 
 - ✅ **Automatic email notifications** - Welcome and reminder emails
 - ✅ **Admin dashboard** - Complete email analytics and CSV exports
 - ✅ **Auto-updater system** - Get updates automatically from GitHub
+- ✅ **SMTP email configuration** - Reliable email delivery with popular providers
 - ✅ **Rate limiting** - Prevents abuse and spam
 - ✅ **Mobile responsive** - Works perfectly on all devices
 
@@ -72,6 +73,14 @@ Use the shortcode anywhere:
 - Filter by campaign
 - Export email lists as CSV
 - Track conversion rates
+
+### SMTP Email Configuration
+
+- Go to **FOMO Discounts → Email Settings**
+- Enable SMTP for reliable email delivery
+- Configure your preferred email provider (Gmail, Outlook, SendGrid, Mailgun, etc.)
+- Test email functionality with one-click test button
+- Prevents emails from being flagged as spam
 
 ## Email Verification Flow
 
