@@ -230,6 +230,11 @@ class WC_FOMO_Discount_Generator
         if (isset($_POST['wcfd_check_updates'])) {
             $this->check_for_updates();
         }
+        
+        // Handle cleanup test data
+        if (isset($_POST['wcfd_cleanup_test_data'])) {
+            $this->cleanup_test_data();
+        }
 
         global $wpdb;
         $campaigns = $wpdb->get_results("SELECT * FROM {$wpdb->prefix}wcfd_campaigns ORDER BY created_at DESC");
@@ -237,10 +242,16 @@ class WC_FOMO_Discount_Generator
         <div class="wrap">
             <div class="wcfd-header-actions" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                 <h1 style="margin: 0;">FOMO Discount Campaigns</h1>
-                <form method="post" style="margin: 0;">
-                    <?php wp_nonce_field('wcfd_check_updates', 'wcfd_update_nonce'); ?>
-                    <input type="submit" name="wcfd_check_updates" class="button button-secondary" value="🔄 Check for Updates" />
-                </form>
+                <div style="display: flex; gap: 10px;">
+                    <form method="post" style="margin: 0;">
+                        <?php wp_nonce_field('wcfd_check_updates', 'wcfd_update_nonce'); ?>
+                        <input type="submit" name="wcfd_check_updates" class="button button-secondary" value="🔄 Check for Updates" />
+                    </form>
+                    <form method="post" style="margin: 0;">
+                        <?php wp_nonce_field('wcfd_cleanup_test_data', 'wcfd_cleanup_nonce'); ?>
+                        <input type="submit" name="wcfd_cleanup_test_data" class="button button-secondary" value="🗑️ Clear Test Data" onclick="return confirm('Are you sure? This will delete all claimed codes and WooCommerce coupons for testing.');" />
+                    </form>
+                </div>
             </div>
 
             <div class="wcfd-admin-container">
@@ -661,6 +672,9 @@ class WC_FOMO_Discount_Generator
             $campaign_id,
             $email
         ));
+        
+        error_log('WCFD: Checking for existing claims - Email: ' . $email . ', Campaign: ' . $campaign_id);
+        error_log('WCFD: Existing claim found: ' . ($existing ? 'YES (ID: ' . $existing->id . ')' : 'NO'));
 
         if ($existing) {
             wp_send_json_error(__('This email has already claimed a discount for this campaign', 'wc-fomo-discount'));
@@ -1956,6 +1970,42 @@ class WC_FOMO_Discount_Generator
             'http_code' => $response_code,
             'response_body' => null
         );
+    }
+    
+    public function cleanup_test_data() {
+        // Verify nonce
+        if (!wp_verify_nonce($_POST['wcfd_cleanup_nonce'], 'wcfd_cleanup_test_data')) {
+            return;
+        }
+        
+        global $wpdb;
+        
+        // Get all FOMO coupon codes before deleting records
+        $fomo_codes = $wpdb->get_results(
+            "SELECT coupon_code FROM {$wpdb->prefix}wcfd_claimed_codes"
+        );
+        
+        $deleted_coupons = 0;
+        foreach ($fomo_codes as $code) {
+            $coupon = new WC_Coupon($code->coupon_code);
+            if ($coupon->get_id()) {
+                $coupon->delete(true);
+                $deleted_coupons++;
+            }
+        }
+        
+        // Clear database tables
+        $claimed_deleted = $wpdb->query("DELETE FROM {$wpdb->prefix}wcfd_claimed_codes");
+        $verifications_deleted = $wpdb->query("DELETE FROM {$wpdb->prefix}wcfd_email_verifications");
+        $waitlist_deleted = $wpdb->query("DELETE FROM {$wpdb->prefix}wcfd_waitlist");
+        
+        // Reset campaign codes_remaining to total_codes
+        $wpdb->query("UPDATE {$wpdb->prefix}wcfd_campaigns SET codes_remaining = total_codes");
+        
+        echo '<div class="notice notice-success is-dismissible"><p><strong>✅ Test Data Cleared!</strong><br>';
+        echo 'Deleted: ' . $claimed_deleted . ' claimed codes, ' . $verifications_deleted . ' pending verifications, ' . $waitlist_deleted . ' waitlist entries<br>';
+        echo 'Removed: ' . $deleted_coupons . ' WooCommerce coupons<br>';
+        echo 'Reset all campaigns to full code availability</p></div>';
     }
 }
 
