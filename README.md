@@ -12,6 +12,9 @@ Generate limited quantity, time-limited discount codes with real-time countdown 
 - ✅ **Admin dashboard** - Complete email analytics and CSV exports
 - ✅ **Auto-updater system** - Get updates automatically from GitHub
 - ✅ **SMTP email configuration** - Reliable email delivery with popular providers
+- ✅ **Waitlist lead magnet** - Capture emails when campaigns sell out
+- ✅ **Tiered discount system** - Higher discounts for early claimers
+- ✅ **IP address limiting** - Prevent multiple claims from same IP
 - ✅ **Rate limiting** - Prevents abuse and spam
 - ✅ **Mobile responsive** - Works perfectly on all devices
 
@@ -81,6 +84,36 @@ Use the shortcode anywhere:
 - Configure your preferred email provider (Gmail, Outlook, SendGrid, Mailgun, etc.)
 - Test email functionality with one-click test button
 - Prevents emails from being flagged as spam
+
+### Waitlist Lead Magnet
+
+When campaigns sell out, users see an engaging waitlist form instead of a dead end:
+
+- **Smart sold-out handling** - Automatically shows waitlist form when codes run out
+- **Beautiful conversion form** - Attractive design with clear benefits
+- **Email capture** - Collects emails for future campaign notifications
+- **Confirmation emails** - Sends welcome email to new waitlist subscribers
+- **Duplicate prevention** - Prevents same email from joining multiple times
+- **Success messaging** - Clear next steps and expectations
+
+### Tiered Discount System
+
+Create urgency with decreasing discounts as codes are claimed:
+
+- **Tier 1**: Highest discount for first X codes (e.g., 25% off first 50 codes)
+- **Tier 2**: Medium discount for next Y codes (e.g., 15% off next 30 codes)  
+- **Tier 3**: Final discount for remaining codes (e.g., 10% off remaining)
+- **Real-time tier display** - Shows current tier and urgency messaging
+- **Automatic tier transitions** - Seamlessly moves between tiers as codes are claimed
+
+### IP Address Limiting
+
+Prevent abuse while allowing legitimate multiple users:
+
+- **Per-IP limits** - Set maximum claims per IP address (1-10+)
+- **Household-friendly** - Configurable limits allow family members to claim
+- **Business-friendly** - Higher limits for office environments
+- **Smart detection** - Works with email verification to prevent gaming
 
 ## Email Verification Flow
 

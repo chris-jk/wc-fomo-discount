@@ -13,7 +13,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('WCFD_VERSION', '1.0.0');
+define('WCFD_VERSION', '1.0.1');
 define('WCFD_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('WCFD_PLUGIN_URL', plugin_dir_url(__FILE__));
 
@@ -48,6 +48,8 @@ class WC_FOMO_Discount_Generator
         add_action('wp_ajax_nopriv_wcfd_get_campaign_status', array($this, 'ajax_get_campaign_status'));
         add_action('wp_ajax_wcfd_verify_email', array($this, 'ajax_verify_email'));
         add_action('wp_ajax_nopriv_wcfd_verify_email', array($this, 'ajax_verify_email'));
+        add_action('wp_ajax_wcfd_join_waitlist', array($this, 'ajax_join_waitlist'));
+        add_action('wp_ajax_nopriv_wcfd_join_waitlist', array($this, 'ajax_join_waitlist'));
 
         // Shortcode for discount widget
         add_shortcode('fomo_discount', array($this, 'render_discount_widget'));
@@ -97,6 +99,10 @@ class WC_FOMO_Discount_Generator
             expiry_hours int(11) NOT NULL,
             scope_type enum('all','products','categories') DEFAULT 'all',
             scope_ids text,
+            enable_tiers tinyint(1) DEFAULT 0,
+            tier_config text,
+            enable_ip_limit tinyint(1) DEFAULT 0,
+            max_per_ip int(11) DEFAULT 1,
             status enum('active','paused','expired') DEFAULT 'active',
             created_at datetime DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (id),
@@ -140,10 +146,29 @@ class WC_FOMO_Discount_Generator
             KEY idx_expires_at (expires_at)
         ) $charset_collate;";
 
+        // Waitlist table for lead magnet
+        $waitlist_table = $wpdb->prefix . 'wcfd_waitlist';
+        $sql4 = "CREATE TABLE $waitlist_table (
+            id int(11) NOT NULL AUTO_INCREMENT,
+            email varchar(255) NOT NULL,
+            campaign_id int(11) DEFAULT NULL,
+            source enum('sold_out','general') DEFAULT 'sold_out',
+            status enum('active','notified','unsubscribed') DEFAULT 'active',
+            created_at datetime DEFAULT CURRENT_TIMESTAMP,
+            notified_at datetime DEFAULT NULL,
+            ip_address varchar(45) DEFAULT NULL,
+            PRIMARY KEY (id),
+            UNIQUE KEY unique_email_campaign (email, campaign_id),
+            KEY idx_status (status),
+            KEY idx_email (email),
+            KEY idx_created (created_at)
+        ) $charset_collate;";
+
         require_once(ABSPATH . 'wp-admin/includes/upgrade.php');
         dbDelta($sql1);
         dbDelta($sql2);
         dbDelta($sql3);
+        dbDelta($sql4);
         
         // Add version option for future upgrades
         add_option('wcfd_db_version', WCFD_VERSION);
@@ -250,6 +275,51 @@ class WC_FOMO_Discount_Generator
                                 <th>IDs (comma-separated)</th>
                                 <td><input type="text" name="scope_ids" placeholder="1,2,3" /></td>
                             </tr>
+                            <tr>
+                                <th>Tiered Discounts</th>
+                                <td>
+                                    <label>
+                                        <input type="checkbox" name="enable_tiers" id="enable_tiers" />
+                                        Enable tiered discount system
+                                    </label>
+                                    <p class="description">Start with higher discount, decrease as more codes are claimed</p>
+                                </td>
+                            </tr>
+                            <tr id="tier_config_row" style="display:none;">
+                                <th>Tier Configuration</th>
+                                <td>
+                                    <div id="tier_builder">
+                                        <p>Define discount tiers (higher discounts for earlier claims):</p>
+                                        <div class="tier-row">
+                                            <label>First <input type="number" name="tier_1_codes" min="1" placeholder="50" style="width:60px;"> codes get <input type="number" name="tier_1_discount" step="0.01" placeholder="25" style="width:60px;"><span class="tier-1-suffix">%</span> discount</label>
+                                        </div>
+                                        <div class="tier-row">
+                                            <label>Next <input type="number" name="tier_2_codes" min="1" placeholder="30" style="width:60px;"> codes get <input type="number" name="tier_2_discount" step="0.01" placeholder="15" style="width:60px;"><span class="tier-2-suffix">%</span> discount</label>
+                                        </div>
+                                        <div class="tier-row">
+                                            <label>Remaining codes get <input type="number" name="tier_3_discount" step="0.01" placeholder="10" style="width:60px;"><span class="tier-3-suffix">%</span> discount</label>
+                                        </div>
+                                        <p class="description">Example: First 50 codes = 25% off, next 30 codes = 15% off, remaining = 10% off</p>
+                                    </div>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>IP Address Limiting</th>
+                                <td>
+                                    <label>
+                                        <input type="checkbox" name="enable_ip_limit" id="enable_ip_limit" />
+                                        Limit claims per IP address
+                                    </label>
+                                    <p class="description">Prevent multiple claims from the same IP address</p>
+                                </td>
+                            </tr>
+                            <tr id="ip_limit_row" style="display:none;">
+                                <th>Max Claims Per IP</th>
+                                <td>
+                                    <input type="number" name="max_per_ip" min="1" value="1" style="width:80px;" />
+                                    <p class="description">Maximum discount codes one IP address can claim</p>
+                                </td>
+                            </tr>
                         </table>
 
                         <p class="submit">
@@ -306,6 +376,39 @@ class WC_FOMO_Discount_Generator
                             $('#scope_ids_row').hide();
                         }
                     });
+                    
+                    // Handle tier configuration visibility
+                    $('#enable_tiers').change(function () {
+                        if ($(this).is(':checked')) {
+                            $('#tier_config_row').show();
+                            updateTierSuffixes();
+                        } else {
+                            $('#tier_config_row').hide();
+                        }
+                    });
+                    
+                    // Handle IP limit configuration visibility
+                    $('#enable_ip_limit').change(function () {
+                        if ($(this).is(':checked')) {
+                            $('#ip_limit_row').show();
+                        } else {
+                            $('#ip_limit_row').hide();
+                        }
+                    });
+                    
+                    // Update tier suffixes based on discount type
+                    $('select[name="discount_type"]').change(function () {
+                        updateTierSuffixes();
+                    });
+                    
+                    function updateTierSuffixes() {
+                        var discountType = $('select[name="discount_type"]').val();
+                        var suffix = discountType === 'percent' ? '%' : '<?php echo get_woocommerce_currency_symbol(); ?>';
+                        $('.tier-1-suffix, .tier-2-suffix, .tier-3-suffix').text(suffix);
+                    }
+                    
+                    // Initialize on page load
+                    updateTierSuffixes();
                 });
             </script>
         </div>
@@ -321,6 +424,24 @@ class WC_FOMO_Discount_Generator
             return;
         }
 
+        // Process tier configuration
+        $tier_config = '';
+        if (isset($data['enable_tiers']) && $data['enable_tiers']) {
+            $tier_config = json_encode([
+                'tier_1' => [
+                    'codes' => intval($data['tier_1_codes']),
+                    'discount' => floatval($data['tier_1_discount'])
+                ],
+                'tier_2' => [
+                    'codes' => intval($data['tier_2_codes']),
+                    'discount' => floatval($data['tier_2_discount'])
+                ],
+                'tier_3' => [
+                    'discount' => floatval($data['tier_3_discount'])
+                ]
+            ]);
+        }
+        
         $wpdb->insert(
             $wpdb->prefix . 'wcfd_campaigns',
             array(
@@ -332,6 +453,10 @@ class WC_FOMO_Discount_Generator
                 'expiry_hours' => intval($data['expiry_hours']),
                 'scope_type' => sanitize_text_field($data['scope_type']),
                 'scope_ids' => $this->validate_scope_ids($data['scope_ids']),
+                'enable_tiers' => isset($data['enable_tiers']) ? 1 : 0,
+                'tier_config' => $tier_config,
+                'enable_ip_limit' => isset($data['enable_ip_limit']) ? 1 : 0,
+                'max_per_ip' => intval($data['max_per_ip'] ?? 1),
                 'status' => 'active'
             )
         );
@@ -382,13 +507,44 @@ class WC_FOMO_Discount_Generator
         <div class="wcfd-discount-widget" data-campaign-id="<?php echo $campaign->id; ?>">
             <div class="wcfd-header">
                 <h3>🔥 Limited Time Offer!</h3>
-                <div class="wcfd-discount-value">
-                    <?php
-                    echo $campaign->discount_type == 'percent'
-                        ? $campaign->discount_value . '% OFF'
-                        : 'SAVE ' . get_woocommerce_currency_symbol() . $campaign->discount_value;
+                <?php if ($campaign->enable_tiers && !empty($campaign->tier_config)): ?>
+                    <?php 
+                    $current_discount = $this->calculate_discount_value($campaign);
+                    $tiers = json_decode($campaign->tier_config, true);
+                    $codes_claimed = $campaign->total_codes - $campaign->codes_remaining;
                     ?>
-                </div>
+                    <div class="wcfd-tier-info">
+                        <div class="wcfd-discount-value">
+                            <?php
+                            echo $campaign->discount_type == 'percent'
+                                ? $current_discount . '% OFF'
+                                : 'SAVE ' . get_woocommerce_currency_symbol() . $current_discount;
+                            ?>
+                        </div>
+                        <div class="wcfd-tier-status">
+                            <?php 
+                            $tier_1_codes = $tiers['tier_1']['codes'] ?? 0;
+                            $tier_2_codes = $tiers['tier_2']['codes'] ?? 0;
+                            
+                            if ($codes_claimed < $tier_1_codes) {
+                                echo "🔥 TIER 1: " . ($tier_1_codes - $codes_claimed) . " codes left at this price!";
+                            } elseif ($codes_claimed < ($tier_1_codes + $tier_2_codes)) {
+                                echo "⚡ TIER 2: " . (($tier_1_codes + $tier_2_codes) - $codes_claimed) . " codes left at this price!";
+                            } else {
+                                echo "💫 FINAL TIER: Last chance discount!";
+                            }
+                            ?>
+                        </div>
+                    </div>
+                <?php else: ?>
+                    <div class="wcfd-discount-value">
+                        <?php
+                        echo $campaign->discount_type == 'percent'
+                            ? $campaign->discount_value . '% OFF'
+                            : 'SAVE ' . get_woocommerce_currency_symbol() . $campaign->discount_value;
+                        ?>
+                    </div>
+                <?php endif; ?>
             </div>
 
             <div class="wcfd-counter">
@@ -458,13 +614,7 @@ class WC_FOMO_Discount_Generator
 
         global $wpdb;
 
-        // For logged-in users, process immediately (trusted email)
-        if (is_user_logged_in()) {
-            $this->process_discount_claim($campaign_id, $email, $ip_address, true);
-            return;
-        }
-
-        // For non-logged-in users, check if already claimed
+        // Check if email already claimed this campaign (for both logged-in and non-logged-in users)
         $existing = $wpdb->get_row($wpdb->prepare(
             "SELECT * FROM {$wpdb->prefix}wcfd_claimed_codes 
             WHERE campaign_id = %d AND user_email = %s AND email_verified = 1",
@@ -473,8 +623,16 @@ class WC_FOMO_Discount_Generator
         ));
 
         if ($existing) {
-            wp_send_json_error(__('You have already claimed a discount from this campaign', 'wc-fomo-discount'));
+            wp_send_json_error(__('This email has already claimed a discount for this campaign', 'wc-fomo-discount'));
         }
+
+        // For logged-in users, process immediately (trusted email)
+        if (is_user_logged_in()) {
+            $this->process_discount_claim($campaign_id, $email, $ip_address, true);
+            return;
+        }
+
+        // For non-logged-in users, continue with email verification process
 
         // Check for pending verification
         $pending = $wpdb->get_row($wpdb->prepare(
@@ -622,14 +780,36 @@ class WC_FOMO_Discount_Generator
                 }
             }
 
+            // Check IP limiting
+            if ($campaign->enable_ip_limit) {
+                $ip_claims = $wpdb->get_var($wpdb->prepare(
+                    "SELECT COUNT(*) FROM {$wpdb->prefix}wcfd_claimed_codes 
+                    WHERE campaign_id = %d AND ip_address = %s AND email_verified = 1",
+                    $campaign_id, $ip_address
+                ));
+                
+                if ($ip_claims >= $campaign->max_per_ip) {
+                    $wpdb->query('ROLLBACK');
+                    if ($verification) {
+                        wp_die(__('Maximum discount codes already claimed from your IP address.', 'wc-fomo-discount'));
+                    } else {
+                        wp_send_json_error(__('Maximum discount codes already claimed from your IP address.', 'wc-fomo-discount'));
+                    }
+                }
+            }
+
+            // Calculate discount value (tiered or standard)
+            $discount_value = $this->calculate_discount_value($campaign);
+            $discount_type = $campaign->discount_type;
+
             // Use existing coupon code if from verification, otherwise generate new
             $coupon_code = $verification ? $verification->coupon_code : 'FOMO' . strtoupper(wp_generate_password(8, false));
 
             // Create WooCommerce coupon
             $coupon = new WC_Coupon();
             $coupon->set_code($coupon_code);
-            $coupon->set_discount_type($campaign->discount_type == 'percent' ? 'percent' : 'fixed_cart');
-            $coupon->set_amount($campaign->discount_value);
+            $coupon->set_discount_type($discount_type == 'percent' ? 'percent' : 'fixed_cart');
+            $coupon->set_amount($discount_value);
             $coupon->set_individual_use(true);
             $coupon->set_usage_limit(1);
             $coupon->set_usage_limit_per_user(1);
@@ -675,10 +855,19 @@ class WC_FOMO_Discount_Generator
             
             if ($result === false) {
                 $wpdb->query('ROLLBACK');
+                // Log the database error for debugging
+                error_log('WCFD Database Error: ' . $wpdb->last_error);
+                error_log('WCFD Failed Query: ' . $wpdb->last_query);
+                
+                $error_message = 'Failed to save discount code';
+                if (defined('WP_DEBUG') && WP_DEBUG && !empty($wpdb->last_error)) {
+                    $error_message .= ': ' . $wpdb->last_error;
+                }
+                
                 if ($verification) {
-                    wp_die(__('Failed to save discount code. Please contact support.', 'wc-fomo-discount'));
+                    wp_die(__($error_message . '. Please contact support.', 'wc-fomo-discount'));
                 } else {
-                    wp_send_json_error(__('Failed to save discount code', 'wc-fomo-discount'));
+                    wp_send_json_error(__($error_message, 'wc-fomo-discount'));
                 }
             }
 
@@ -779,6 +968,65 @@ class WC_FOMO_Discount_Generator
         } else {
             wp_send_json_error(__('Campaign not found', 'wc-fomo-discount'));
         }
+    }
+    
+    public function ajax_join_waitlist()
+    {
+        // Add nonce verification for security
+        check_ajax_referer('wcfd_nonce', 'nonce');
+        
+        $campaign_id = isset($_POST['campaign_id']) ? intval($_POST['campaign_id']) : null;
+        $email = sanitize_email($_POST['email']);
+        $ip_address = $_SERVER['REMOTE_ADDR'];
+        
+        // Validate email
+        if (empty($email) || !is_email($email)) {
+            wp_send_json_error(__('Please provide a valid email address', 'wc-fomo-discount'));
+        }
+        
+        // Rate limiting check (same as discount claiming)
+        if ($this->is_rate_limited($ip_address, $campaign_id)) {
+            wp_send_json_error(__('Too many requests. Please try again later.', 'wc-fomo-discount'));
+        }
+        
+        global $wpdb;
+        
+        // Check if email already exists in waitlist for this campaign
+        $existing = $wpdb->get_row($wpdb->prepare(
+            "SELECT * FROM {$wpdb->prefix}wcfd_waitlist 
+            WHERE email = %s AND (campaign_id = %d OR campaign_id IS NULL)",
+            $email, $campaign_id
+        ));
+        
+        if ($existing) {
+            wp_send_json_success(array(
+                'message' => __('You\'re already on our waitlist! We\'ll notify you about future deals.', 'wc-fomo-discount')
+            ));
+        }
+        
+        // Add to waitlist
+        $result = $wpdb->insert(
+            $wpdb->prefix . 'wcfd_waitlist',
+            array(
+                'email' => $email,
+                'campaign_id' => $campaign_id,
+                'source' => 'sold_out',
+                'status' => 'active',
+                'ip_address' => $ip_address
+            )
+        );
+        
+        if ($result === false) {
+            error_log('WCFD Waitlist Error: ' . $wpdb->last_error);
+            wp_send_json_error(__('Failed to join waitlist. Please try again.', 'wc-fomo-discount'));
+        }
+        
+        // Send confirmation email
+        $this->send_waitlist_confirmation_email($email, $campaign_id);
+        
+        wp_send_json_success(array(
+            'message' => __('Thanks! You\'ve been added to our waitlist. We\'ll notify you about future deals.', 'wc-fomo-discount')
+        ));
     }
     
     private function is_rate_limited($ip, $campaign_id) {
@@ -1351,6 +1599,51 @@ class WC_FOMO_Discount_Generator
         }
     }
     
+    private function send_waitlist_confirmation_email($email, $campaign_id) {
+        global $wpdb;
+        
+        // Get campaign info if available
+        $campaign_name = 'Future Deals';
+        if ($campaign_id) {
+            $campaign = $wpdb->get_row($wpdb->prepare(
+                "SELECT campaign_name FROM {$wpdb->prefix}wcfd_campaigns WHERE id = %d",
+                $campaign_id
+            ));
+            if ($campaign) {
+                $campaign_name = $campaign->campaign_name;
+            }
+        }
+        
+        $subject = 'You\'re on our waitlist! 🎉';
+        $message = "
+        <h2>Welcome to our exclusive waitlist!</h2>
+        <p>Hi there! 👋</p>
+        <p>Thanks for joining our waitlist for <strong>$campaign_name</strong>. You'll be the first to know when we have new discount codes available!</p>
+        
+        <div style='background: #f9f9f9; padding: 20px; border-radius: 8px; margin: 20px 0;'>
+            <h3>🔔 What happens next?</h3>
+            <ul style='line-height: 1.6;'>
+                <li>📧 We'll email you when new discounts are available</li>
+                <li>⚡ You'll get early access before anyone else</li>
+                <li>🎁 Exclusive deals just for waitlist members</li>
+            </ul>
+        </div>
+        
+        <p>Don't worry - we won't spam you. We only send notifications about amazing deals!</p>
+        
+        <p>Thanks for your patience,<br>
+        The " . get_bloginfo('name') . " Team</p>
+        
+        <hr style='margin: 30px 0;'>
+        <small style='color: #666;'>
+            Don't want these emails? <a href='#' style='color: #666;'>Unsubscribe here</a>
+        </small>
+        ";
+        
+        $headers = array('Content-Type: text/html; charset=UTF-8');
+        wp_mail($email, $subject, $message, $headers);
+    }
+    
     public function show_wp_mail_notice() {
         // Only show on FOMO discount pages and avoid duplicate notices
         if (!isset($_GET['page']) || strpos($_GET['page'], 'wcfd') === false) {
@@ -1369,6 +1662,39 @@ class WC_FOMO_Discount_Generator
             Emails may be flagged as spam or not delivered reliably. 
             <a href="' . admin_url('admin.php?page=wcfd-email-settings') . '">Configure SMTP settings</a> for better deliverability.</p>
         </div>';
+    }
+    
+    private function calculate_discount_value($campaign) {
+        // If tiers are not enabled, return standard discount value
+        if (!$campaign->enable_tiers || empty($campaign->tier_config)) {
+            return $campaign->discount_value;
+        }
+        
+        // Parse tier configuration
+        $tiers = json_decode($campaign->tier_config, true);
+        if (!$tiers) {
+            return $campaign->discount_value;
+        }
+        
+        // Calculate how many codes have been claimed
+        $total_codes = $campaign->total_codes;
+        $codes_remaining = $campaign->codes_remaining;
+        $codes_claimed = $total_codes - $codes_remaining;
+        
+        // Determine which tier applies
+        $tier_1_codes = $tiers['tier_1']['codes'] ?? 0;
+        $tier_2_codes = $tiers['tier_2']['codes'] ?? 0;
+        
+        if ($codes_claimed < $tier_1_codes) {
+            // Still in tier 1 (highest discount)
+            return $tiers['tier_1']['discount'] ?? $campaign->discount_value;
+        } elseif ($codes_claimed < ($tier_1_codes + $tier_2_codes)) {
+            // In tier 2 (medium discount)
+            return $tiers['tier_2']['discount'] ?? $campaign->discount_value;
+        } else {
+            // In tier 3 (lowest discount)
+            return $tiers['tier_3']['discount'] ?? $campaign->discount_value;
+        }
     }
 }
 

@@ -62,6 +62,36 @@
     animation: pulse 2s ease-in-out infinite;
 }
 
+/* Tiered Discount Styles */
+.wcfd-tier-info {
+    text-align: center;
+}
+
+.wcfd-tier-status {
+    font-size: 14px;
+    font-weight: bold;
+    color: rgba(255,255,255,0.9);
+    margin-top: 10px;
+    padding: 8px 15px;
+    background: rgba(255,255,255,0.15);
+    border-radius: 20px;
+    display: inline-block;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    animation: tierPulse 3s ease-in-out infinite;
+}
+
+@keyframes tierPulse {
+    0%, 100% { 
+        background: rgba(255,255,255,0.15); 
+        transform: scale(1); 
+    }
+    50% { 
+        background: rgba(255,255,255,0.25); 
+        transform: scale(1.02); 
+    }
+}
+
 @keyframes pulse {
     0%, 100% { transform: scale(1); }
     50% { transform: scale(1.05); }
@@ -410,4 +440,162 @@
 .wcfd-verification-sent small {
     opacity: 0.8;
     font-style: italic;
+}
+
+/* Waitlist Form Styles */
+.wcfd-waitlist-form {
+    background: rgba(255,255,255,0.2);
+    border-radius: 10px;
+    padding: 25px;
+    text-align: center;
+    backdrop-filter: blur(10px);
+    position: relative;
+    z-index: 1;
+}
+
+.wcfd-sold-out-header h4 {
+    font-size: 24px;
+    margin: 0 0 10px 0;
+    color: #ff6b6b;
+}
+
+.wcfd-sold-out-header p {
+    margin: 0 0 20px 0;
+    opacity: 0.9;
+    font-size: 16px;
+}
+
+.wcfd-waitlist-signup {
+    margin-top: 20px;
+}
+
+.wcfd-waitlist-signup h4 {
+    font-size: 20px;
+    margin: 0 0 10px 0;
+    color: #4CAF50;
+}
+
+.wcfd-waitlist-signup p {
+    margin: 0 0 20px 0;
+    line-height: 1.5;
+}
+
+.wcfd-waitlist-input-group {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 15px;
+    align-items: stretch;
+}
+
+.wcfd-waitlist-email {
+    flex: 1;
+    padding: 15px;
+    border: none;
+    border-radius: 8px;
+    font-size: 16px;
+    box-sizing: border-box;
+}
+
+.wcfd-waitlist-btn {
+    padding: 15px 25px;
+    background: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    white-space: nowrap;
+}
+
+.wcfd-waitlist-btn:hover:not(:disabled) {
+    background: #45a049;
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+}
+
+.wcfd-waitlist-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.wcfd-waitlist-benefits {
+    margin-top: 10px;
+}
+
+.wcfd-waitlist-benefits small {
+    opacity: 0.8;
+    font-style: italic;
+    line-height: 1.4;
+}
+
+.wcfd-waitlist-error {
+    background: #ff4444;
+    color: white;
+    padding: 15px;
+    border-radius: 8px;
+    margin-top: 15px;
+    text-align: center;
+    position: relative;
+    z-index: 1;
+}
+
+.wcfd-waitlist-success {
+    background: rgba(255,255,255,0.2);
+    border-radius: 10px;
+    padding: 25px;
+    text-align: center;
+    backdrop-filter: blur(10px);
+    position: relative;
+    z-index: 1;
+}
+
+.wcfd-waitlist-success h4 {
+    font-size: 24px;
+    margin: 0 0 15px 0;
+    color: #4CAF50;
+}
+
+.wcfd-waitlist-success p {
+    margin: 10px 0;
+    line-height: 1.5;
+}
+
+.wcfd-waitlist-next-steps {
+    margin-top: 20px;
+    text-align: left;
+}
+
+.wcfd-waitlist-next-steps p {
+    margin-bottom: 10px;
+    font-weight: bold;
+}
+
+.wcfd-waitlist-next-steps ul {
+    margin: 0;
+    padding-left: 20px;
+}
+
+.wcfd-waitlist-next-steps li {
+    margin-bottom: 8px;
+    line-height: 1.4;
+}
+
+/* Mobile responsiveness for waitlist */
+@media (max-width: 600px) {
+    .wcfd-waitlist-input-group {
+        flex-direction: column;
+    }
+    
+    .wcfd-waitlist-btn {
+        padding: 12px 20px;
+        font-size: 14px;
+    }
+    
+    .wcfd-waitlist-next-steps {
+        text-align: center;
+    }
 }

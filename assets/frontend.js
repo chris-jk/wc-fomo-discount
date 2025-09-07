@@ -94,10 +94,10 @@ jQuery(document).ready(function ($) {
                 setTimeout(() => widget.removeClass('wcfd-pulse'), CONSTANTS.PULSE_DURATION);
             }
 
-            // Disable if no codes left
+            // Show waitlist form if no codes left
             if (codesRemaining === 0) {
                 widget.find('.wcfd-claim-form').fadeOut(400, function() {
-                    $(this).html('<p class="wcfd-sold-out">SOLD OUT! All codes have been claimed.</p>').fadeIn(200);
+                    showWaitlistForm(widget, campaignId);
                 });
                 clearInterval(updateIntervals[widget.data('campaign-id')]);
             }
@@ -360,6 +360,112 @@ jQuery(document).ready(function ($) {
             }, CONSTANTS.NOTIFICATION_TIME);
         }
     });
+
+    function showWaitlistForm(widget, campaignId) {
+        const waitlistForm = $(`
+            <div class="wcfd-waitlist-form" style="animation: slideIn 0.5s ease-out;">
+                <div class="wcfd-sold-out-header">
+                    <h4>😱 All Gone!</h4>
+                    <p>All discount codes have been claimed, but don't worry...</p>
+                </div>
+                
+                <div class="wcfd-waitlist-signup">
+                    <h4>🔔 Get Notified Next Time!</h4>
+                    <p>Join our waitlist and be the first to know when we release new discount codes.</p>
+                    
+                    <div class="wcfd-waitlist-input-group">
+                        <input type="email" class="wcfd-waitlist-email" placeholder="Enter your email address" required>
+                        <button class="wcfd-waitlist-btn">Notify Me!</button>
+                    </div>
+                    
+                    <div class="wcfd-waitlist-benefits">
+                        <small>✨ Early access • 🎁 Exclusive deals • 📧 No spam, just savings</small>
+                    </div>
+                </div>
+                
+                <div class="wcfd-waitlist-error" style="display: none;"></div>
+            </div>
+        `);
+        
+        widget.find('.wcfd-claim-form').html(waitlistForm).fadeIn(200);
+        
+        // Handle waitlist signup
+        waitlistForm.find('.wcfd-waitlist-btn').on('click', function(e) {
+            e.preventDefault();
+            joinWaitlist(widget, campaignId);
+        });
+        
+        // Handle enter key in email field
+        waitlistForm.find('.wcfd-waitlist-email').on('keypress', function(e) {
+            if (e.which === 13) {
+                e.preventDefault();
+                joinWaitlist(widget, campaignId);
+            }
+        });
+    }
+
+    function joinWaitlist(widget, campaignId) {
+        const button = widget.find('.wcfd-waitlist-btn');
+        const emailField = widget.find('.wcfd-waitlist-email');
+        const email = emailField.val().trim();
+        
+        // Validate email
+        if (!email || !validateEmail(email)) {
+            showWaitlistError(widget, 'Please enter a valid email address');
+            return;
+        }
+        
+        // Disable button and show loading
+        button.prop('disabled', true).text('Joining...');
+        
+        $.ajax({
+            url: wcfd_ajax.ajax_url,
+            type: 'POST',
+            data: {
+                action: 'wcfd_join_waitlist',
+                campaign_id: campaignId,
+                email: email,
+                nonce: wcfd_ajax.nonce
+            },
+            success: function(response) {
+                if (response.success) {
+                    // Show success message
+                    widget.find('.wcfd-waitlist-form').fadeOut(400, function() {
+                        $(this).html(`
+                            <div class="wcfd-waitlist-success">
+                                <h4>🎉 You're In!</h4>
+                                <p>${response.data.message}</p>
+                                <div class="wcfd-waitlist-next-steps">
+                                    <p><strong>What's next?</strong></p>
+                                    <ul>
+                                        <li>📧 Check your email for confirmation</li>
+                                        <li>⚡ Get early access to future deals</li>
+                                        <li>🎁 Exclusive member-only discounts</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        `).fadeIn(200);
+                    });
+                } else {
+                    showWaitlistError(widget, response.data || 'Failed to join waitlist');
+                    button.prop('disabled', false).text('Notify Me!');
+                }
+            },
+            error: function(xhr, status, error) {
+                console.error('Failed to join waitlist:', error);
+                showWaitlistError(widget, 'Connection error. Please try again.');
+                button.prop('disabled', false).text('Notify Me!');
+            }
+        });
+    }
+
+    function showWaitlistError(widget, message) {
+        const errorElement = widget.find('.wcfd-waitlist-error');
+        errorElement.text(message).fadeIn();
+        setTimeout(() => {
+            errorElement.fadeOut();
+        }, CONSTANTS.ERROR_DISPLAY_TIME);
+    }
 
     // Cleanup intervals when page unloads
     $(window).on('beforeunload', function () {
