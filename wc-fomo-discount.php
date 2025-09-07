@@ -13,7 +13,7 @@ if (!defined('ABSPATH')) {
 }
 
 // Define plugin constants
-define('WCFD_VERSION', '1.0.1');
+define('WCFD_VERSION', '1.0.2');
 define('WCFD_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('WCFD_PLUGIN_URL', plugin_dir_url(__FILE__));
 
@@ -69,6 +69,9 @@ class WC_FOMO_Discount_Generator
         
         // Configure SMTP if settings exist
         add_action('phpmailer_init', array($this, 'configure_smtp'));
+        
+        // Add check for updates button to plugins page
+        add_filter('plugin_action_links_' . plugin_basename(__FILE__), array($this, 'add_plugin_action_links'));
     }
 
     public function init()
@@ -222,12 +225,23 @@ class WC_FOMO_Discount_Generator
         if (isset($_POST['wcfd_create_campaign'])) {
             $this->create_campaign($_POST);
         }
+        
+        // Handle check for updates
+        if (isset($_POST['wcfd_check_updates'])) {
+            $this->check_for_updates();
+        }
 
         global $wpdb;
         $campaigns = $wpdb->get_results("SELECT * FROM {$wpdb->prefix}wcfd_campaigns ORDER BY created_at DESC");
         ?>
         <div class="wrap">
-            <h1>FOMO Discount Campaigns</h1>
+            <div class="wcfd-header-actions" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h1 style="margin: 0;">FOMO Discount Campaigns</h1>
+                <form method="post" style="margin: 0;">
+                    <?php wp_nonce_field('wcfd_check_updates', 'wcfd_update_nonce'); ?>
+                    <input type="submit" name="wcfd_check_updates" class="button button-secondary" value="🔄 Check for Updates" />
+                </form>
+            </div>
 
             <div class="wcfd-admin-container">
                 <div class="wcfd-create-campaign">
@@ -690,10 +704,11 @@ class WC_FOMO_Discount_Generator
             wp_send_json_error(__('Failed to process verification request', 'wc-fomo-discount'));
         }
         
-        // Create verification URL
+        // Create verification URL with nonce for CSRF protection
         $verify_url = add_query_arg([
             'wcfd_verify' => $verification_token,
-            'campaign' => $campaign_id
+            'campaign' => $campaign_id,
+            'nonce' => wp_create_nonce('wcfd_verify_' . $verification_token)
         ], home_url());
         
         // Send verification email
@@ -728,9 +743,15 @@ class WC_FOMO_Discount_Generator
     public function ajax_verify_email() {
         $token = sanitize_text_field($_GET['wcfd_verify']);
         $campaign_id = intval($_GET['campaign']);
+        $nonce = sanitize_text_field($_GET['nonce']);
         
         if (!$token || !$campaign_id) {
             wp_die(__('Invalid verification link', 'wc-fomo-discount'));
+        }
+        
+        // Verify CSRF nonce
+        if (!wp_verify_nonce($nonce, 'wcfd_verify_' . $token)) {
+            wp_die(__('Security verification failed. This link may be invalid or expired.', 'wc-fomo-discount'));
         }
         
         global $wpdb;
@@ -1469,6 +1490,19 @@ class WC_FOMO_Discount_Generator
                     </tr>
                 </table>
                 
+                <h2>GitHub Integration (for Private Repository Updates)</h2>
+                <table class="form-table">
+                    <tr>
+                        <th scope="row">GitHub Token</th>
+                        <td>
+                            <?php $github_token = get_option('wcfd_github_token', ''); ?>
+                            <input type="password" name="github_token" value="<?php echo esc_attr($github_token); ?>" class="regular-text" placeholder="<?php echo $github_token ? '••••••••••••••••' : 'ghp_xxxxxxxxxxxxxxxxxxxx'; ?>" />
+                            <p class="description">Required only for private repositories. <a href="https://github.com/settings/tokens" target="_blank">Generate a Personal Access Token</a> with 'repo' permissions.</p>
+                            <p class="description"><strong>Public repositories don't need this.</strong></p>
+                        </td>
+                    </tr>
+                </table>
+                
                 <div class="wcfd-smtp-providers" style="margin-top: 20px; padding: 20px; background: #f9f9f9; border-radius: 5px;">
                     <h3>Popular SMTP Provider Settings</h3>
                     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 15px;">
@@ -1535,6 +1569,11 @@ class WC_FOMO_Discount_Generator
         );
         
         update_option('wcfd_smtp_settings', $smtp_settings);
+        
+        // Save GitHub token (only save if provided)
+        if (!empty($post_data['github_token'])) {
+            update_option('wcfd_github_token', sanitize_text_field($post_data['github_token']));
+        }
         
         echo '<div class="notice notice-success"><p>Email settings saved successfully!</p></div>';
     }
@@ -1695,6 +1734,85 @@ class WC_FOMO_Discount_Generator
             // In tier 3 (lowest discount)
             return $tiers['tier_3']['discount'] ?? $campaign->discount_value;
         }
+    }
+    
+    public function check_for_updates() {
+        // Verify nonce
+        if (!wp_verify_nonce($_POST['wcfd_update_nonce'], 'wcfd_check_updates')) {
+            return;
+        }
+        
+        // Force check for updates by clearing transients
+        delete_transient('wcfd_remote_version');
+        delete_transient('wcfd_remote_readme');
+        delete_transient('wcfd_remote_changelog');
+        
+        // Clear WordPress update transient to force check
+        delete_site_transient('update_plugins');
+        
+        // Try to get the latest version
+        $updater = new WCFD_Auto_Updater(__FILE__, 'chris-jk', 'wc-fomo-discount', WCFD_VERSION);
+        $remote_version = $this->get_remote_version_direct();
+        
+        if ($remote_version) {
+            if (version_compare(WCFD_VERSION, $remote_version, '<')) {
+                echo '<div class="notice notice-info is-dismissible"><p><strong>🎉 Update Available!</strong> Version ' . esc_html($remote_version) . ' is available. You are currently running version ' . esc_html(WCFD_VERSION) . '. <a href="' . admin_url('plugins.php') . '">Go to Plugins page to update</a>.</p></div>';
+            } else {
+                echo '<div class="notice notice-success is-dismissible"><p><strong>✅ You\'re up to date!</strong> You are running the latest version (' . esc_html(WCFD_VERSION) . ').</p></div>';
+            }
+        } else {
+            echo '<div class="notice notice-error is-dismissible"><p><strong>❌ Update Check Failed</strong> Unable to check for updates. Please ensure your server can access GitHub API or check manually on <a href="https://github.com/chris-jk/wc-fomo-discount" target="_blank">GitHub</a>.</p></div>';
+        }
+    }
+    
+    public function add_plugin_action_links($links) {
+        $check_update_link = '<a href="#" onclick="document.getElementById(\'wcfd-check-updates-form\').submit(); return false;" style="color: #0073aa; font-weight: bold;">🔄 Check for Updates</a>';
+        array_unshift($links, $check_update_link);
+        
+        // Add hidden form for update check
+        add_action('admin_footer', function() {
+            echo '<form id="wcfd-check-updates-form" method="post" action="' . admin_url('admin.php?page=wcfd-campaigns') . '" style="display:none;">';
+            wp_nonce_field('wcfd_check_updates', 'wcfd_update_nonce');
+            echo '<input type="hidden" name="wcfd_check_updates" value="1">';
+            echo '</form>';
+        });
+        
+        return $links;
+    }
+    
+    private function get_remote_version_direct() {
+        $request = wp_remote_get('https://api.github.com/repos/chris-jk/wc-fomo-discount/releases/latest', array(
+            'timeout' => 15,
+            'sslverify' => true,
+            'user-agent' => 'WordPress/' . get_bloginfo('version') . '; ' . home_url(),
+            'headers' => array(
+                'Accept' => 'application/vnd.github.v3+json'
+            )
+        ));
+        
+        // Debug information
+        if (is_wp_error($request)) {
+            error_log('WCFD Update Check Error: ' . $request->get_error_message());
+            return false;
+        }
+        
+        $response_code = wp_remote_retrieve_response_code($request);
+        if ($response_code != 200) {
+            error_log('WCFD Update Check HTTP Error: ' . $response_code);
+            $body = wp_remote_retrieve_body($request);
+            error_log('WCFD Response Body: ' . $body);
+            return false;
+        }
+        
+        $body = wp_remote_retrieve_body($request);
+        $data = json_decode($body, true);
+        
+        if (isset($data['tag_name'])) {
+            return ltrim($data['tag_name'], 'v');
+        }
+        
+        error_log('WCFD Update Check: No tag_name found in response');
+        return false;
     }
 }
 

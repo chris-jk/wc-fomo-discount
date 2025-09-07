@@ -15,13 +15,15 @@ class WCFD_Auto_Updater {
     private $github_user;
     private $github_repo;
     private $plugin_file;
+    private $github_token;
     
-    public function __construct($plugin_file, $github_user, $github_repo, $version) {
+    public function __construct($plugin_file, $github_user, $github_repo, $version, $github_token = '') {
         $this->plugin_file = $plugin_file;
         $this->plugin_slug = plugin_basename($plugin_file);
         $this->version = $version;
         $this->github_user = $github_user;
         $this->github_repo = $github_repo;
+        $this->github_token = $github_token ?: get_option('wcfd_github_token', '');
         
         add_filter('pre_set_site_transient_update_plugins', array($this, 'check_for_update'));
         add_filter('plugins_api', array($this, 'plugin_popup'), 10, 3);
@@ -108,7 +110,16 @@ class WCFD_Auto_Updater {
             return $cached_version;
         }
         
-        $request = wp_remote_get($this->get_api_url('releases/latest'));
+        // Security: Validate GitHub repo details to prevent SSRF
+        if (!$this->validate_github_details()) {
+            return false;
+        }
+        
+        $request = wp_remote_get($this->get_api_url('releases/latest'), array(
+            'timeout' => 10,
+            'sslverify' => true,
+            'user-agent' => 'WordPress/' . get_bloginfo('version') . '; ' . home_url()
+        ));
         
         if (!is_wp_error($request) && wp_remote_retrieve_response_code($request) == 200) {
             $body = wp_remote_retrieve_body($request);
@@ -132,7 +143,7 @@ class WCFD_Auto_Updater {
             return $cached_readme;
         }
         
-        $request = wp_remote_get($this->get_api_url('contents/README.md'));
+        $request = $this->make_secure_request('contents/README.md');
         
         if (!is_wp_error($request) && wp_remote_retrieve_response_code($request) == 200) {
             $body = wp_remote_retrieve_body($request);
@@ -156,7 +167,7 @@ class WCFD_Auto_Updater {
             return $cached_changelog;
         }
         
-        $request = wp_remote_get($this->get_api_url('releases'));
+        $request = $this->make_secure_request('releases');
         
         if (!is_wp_error($request) && wp_remote_retrieve_response_code($request) == 200) {
             $body = wp_remote_retrieve_body($request);
@@ -178,6 +189,10 @@ class WCFD_Auto_Updater {
     }
     
     private function get_download_url() {
+        if (!empty($this->github_token)) {
+            // For private repos, use the API download endpoint
+            return "https://api.github.com/repos/{$this->github_user}/{$this->github_repo}/zipball/main";
+        }
         return "https://github.com/{$this->github_user}/{$this->github_repo}/archive/main.zip";
     }
     
@@ -191,5 +206,41 @@ class WCFD_Auto_Updater {
     
     private function is_plugin_active() {
         return is_plugin_active($this->plugin_slug);
+    }
+    
+    private function validate_github_details() {
+        // Validate GitHub username (alphanumeric, hyphens, max 39 chars)
+        if (!preg_match('/^[a-zA-Z0-9\-]{1,39}$/', $this->github_user)) {
+            return false;
+        }
+        
+        // Validate repository name (alphanumeric, hyphens, underscores, dots, max 100 chars)
+        if (!preg_match('/^[a-zA-Z0-9\-_.]{1,100}$/', $this->github_repo)) {
+            return false;
+        }
+        
+        return true;
+    }
+    
+    private function make_secure_request($endpoint) {
+        if (!$this->validate_github_details()) {
+            return new WP_Error('invalid_repo', 'Invalid GitHub repository details');
+        }
+        
+        $headers = array(
+            'Accept' => 'application/vnd.github.v3+json',
+            'User-Agent' => 'WordPress/' . get_bloginfo('version') . '; ' . home_url()
+        );
+        
+        // Add authorization header for private repositories
+        if (!empty($this->github_token)) {
+            $headers['Authorization'] = 'token ' . $this->github_token;
+        }
+        
+        return wp_remote_get($this->get_api_url($endpoint), array(
+            'timeout' => 10,
+            'sslverify' => true,
+            'headers' => $headers
+        ));
     }
 }
