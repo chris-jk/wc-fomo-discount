@@ -187,9 +187,14 @@ class Frontend_Handler {
      */
     public function ajax_claim_discount() {
         try {
-            // Verify nonce
-            if (!wp_verify_nonce($_POST['nonce'] ?? '', 'wcfd_nonce')) {
-                wp_send_json_error(__('Security check failed', 'wc-fomo-discount'));
+            // Comprehensive nonce validation
+            if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'wcfd_nonce')) {
+                $this->logger->warning('Nonce validation failed', [
+                    'ip' => $_SERVER['REMOTE_ADDR'] ?? 'unknown',
+                    'action' => 'claim_discount'
+                ]);
+                wp_send_json_error(__('Security check failed. Please refresh the page and try again.', 'wc-fomo-discount'));
+                return;
             }
             
             $campaign_id = intval($_POST['campaign_id'] ?? 0);
@@ -251,8 +256,14 @@ class Frontend_Handler {
      */
     public function ajax_get_campaign_status() {
         try {
-            if (!wp_verify_nonce($_POST['nonce'] ?? '', 'wcfd_nonce')) {
-                wp_send_json_error(__('Security check failed', 'wc-fomo-discount'));
+            // Comprehensive nonce validation
+            if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'wcfd_nonce')) {
+                $this->logger->warning('Nonce validation failed', [
+                    'ip' => $_SERVER['REMOTE_ADDR'] ?? 'unknown',
+                    'action' => 'get_campaign_status'
+                ]);
+                wp_send_json_error(__('Security check failed. Please refresh the page and try again.', 'wc-fomo-discount'));
+                return;
             }
             
             $campaign_id = intval($_POST['campaign_id'] ?? 0);
@@ -451,8 +462,14 @@ class Frontend_Handler {
      * AJAX: Join waitlist
      */
     public function ajax_join_waitlist() {
-        if (!wp_verify_nonce($_POST['nonce'] ?? '', 'wcfd_nonce')) {
-            wp_send_json_error(__('Security check failed', 'wc-fomo-discount'));
+        // Comprehensive nonce validation
+        if (!isset($_POST['nonce']) || !wp_verify_nonce($_POST['nonce'], 'wcfd_nonce')) {
+            $this->logger->warning('Nonce validation failed', [
+                'ip' => $_SERVER['REMOTE_ADDR'] ?? 'unknown',
+                'action' => 'join_waitlist'
+            ]);
+            wp_send_json_error(__('Security check failed. Please refresh the page and try again.', 'wc-fomo-discount'));
+            return;
         }
         
         $campaign_id = intval($_POST['campaign_id'] ?? 0);

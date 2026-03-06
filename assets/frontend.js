@@ -164,10 +164,21 @@ jQuery(document).ready(function ($) {
         const emailField = widget.find('.wcfd-email');
         const email = emailField.length ? emailField.val().trim() : '';
 
+        // Input validation
+        if (!campaignId || campaignId <= 0) {
+            showError(widget, 'Invalid campaign');
+            return;
+        }
+
         // Validate email if field exists and has content
         if (emailField.length && email) {
             if (!validateEmail(email)) {
                 showError(widget, 'Please enter a valid email address');
+                return;
+            }
+            // Additional email validation
+            if (email.length > 254) {
+                showError(widget, 'Email address is too long');
                 return;
             }
         }
@@ -305,8 +316,21 @@ jQuery(document).ready(function ($) {
     }
 
     function validateEmail(email) {
-        const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        return re.test(email);
+        // More comprehensive email validation
+        const re = /^[a-zA-Z0-9.!#$%&'*+\/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
+        
+        if (!re.test(email)) {
+            return false;
+        }
+        
+        // Check for common typos
+        const commonTypos = ['gmial.com', 'gmai.com', 'yahooo.com', 'hotmial.com'];
+        const domain = email.split('@')[1];
+        if (commonTypos.includes(domain)) {
+            return false;
+        }
+        
+        return true;
     }
 
     function getTimeRemaining(expiryDate) {
@@ -536,7 +560,7 @@ jQuery(document).ready(function ($) {
             },
             success: function(response) {
                 if (response && (response.result === 'success' || response.success)) {
-                    console.log('WCFD: Coupon applied successfully:', couponCode);
+                    debugLog('Coupon applied successfully: ' + couponCode);
                     // Clear stored coupon since it was applied
                     if (typeof(Storage) !== "undefined") {
                         localStorage.removeItem('wcfd_pending_coupon');

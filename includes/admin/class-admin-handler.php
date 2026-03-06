@@ -357,6 +357,11 @@ class Admin_Handler {
      * Handle create campaign
      */
     private function handle_create_campaign() {
+        // Check user capabilities
+        if (!current_user_can('manage_woocommerce')) {
+            wp_die(__('You do not have permission to perform this action', 'wc-fomo-discount'));
+        }
+        
         if (!wp_verify_nonce($_POST['wcfd_nonce'], 'wcfd_create_campaign')) {
             wp_die(__('Security check failed', 'wc-fomo-discount'));
         }
@@ -403,6 +408,11 @@ class Admin_Handler {
      * Handle update campaign
      */
     private function handle_update_campaign() {
+        // Check user capabilities
+        if (!current_user_can('manage_woocommerce')) {
+            wp_die(__('You do not have permission to perform this action', 'wc-fomo-discount'));
+        }
+        
         if (!wp_verify_nonce($_POST['wcfd_nonce'], 'wcfd_update_campaign')) {
             wp_die(__('Security check failed', 'wc-fomo-discount'));
         }

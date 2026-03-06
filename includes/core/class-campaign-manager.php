@@ -65,56 +65,78 @@ class Campaign_Manager {
             return $validated;
         }
         
-        // Prepare data
-        $insert_data = [
-            'campaign_name' => sanitize_text_field($data['campaign_name']),
-            'discount_type' => $data['discount_type'],
-            'discount_value' => floatval($data['discount_value']),
-            'total_codes' => intval($data['total_codes']),
-            'codes_remaining' => intval($data['total_codes']),
-            'expiry_hours' => intval($data['expiry_hours'] ?? 24),
-            'enable_ip_limit' => isset($data['enable_ip_limit']) ? 1 : 0,
-            'max_per_ip' => intval($data['max_per_ip'] ?? 1),
-            'scope_type' => $data['scope_type'] ?? 'all',
-            'status' => 'active'
-        ];
+        // Start transaction
+        $wpdb->query('START TRANSACTION');
         
-        // Handle tiered discounts
-        if (!empty($data['tiered_discounts'])) {
-            $insert_data['tiered_discounts'] = json_encode($data['tiered_discounts']);
-        }
-        
-        // Handle scope IDs
-        if (!empty($data['scope_ids'])) {
-            $insert_data['scope_ids'] = implode(',', array_map('intval', $data['scope_ids']));
-        }
-        
-        // Insert campaign
-        $result = $wpdb->insert(
-            $this->db_manager->get_table('campaigns'),
-            $insert_data,
-            [
-                '%s', '%s', '%f', '%d', '%d', '%d', '%d', '%d', '%s', '%s'
-            ]
-        );
-        
-        if ($result === false) {
-            $this->logger->error('Failed to create campaign', [
-                'error' => $wpdb->last_error,
-                'data' => $insert_data
+        try {
+            // Prepare data
+            $insert_data = [
+                'campaign_name' => sanitize_text_field($data['campaign_name']),
+                'discount_type' => $data['discount_type'],
+                'discount_value' => floatval($data['discount_value']),
+                'total_codes' => intval($data['total_codes']),
+                'codes_remaining' => intval($data['total_codes']),
+                'expiry_hours' => intval($data['expiry_hours'] ?? 24),
+                'enable_ip_limit' => isset($data['enable_ip_limit']) ? 1 : 0,
+                'max_per_ip' => intval($data['max_per_ip'] ?? 1),
+                'scope_type' => $data['scope_type'] ?? 'all',
+                'status' => 'active'
+            ];
+            
+            // Handle tiered discounts
+            if (!empty($data['tiered_discounts'])) {
+                $insert_data['tiered_discounts'] = json_encode($data['tiered_discounts']);
+            }
+            
+            // Handle scope IDs
+            if (!empty($data['scope_ids'])) {
+                $insert_data['scope_ids'] = implode(',', array_map('intval', $data['scope_ids']));
+            }
+            
+            // Insert campaign
+            $result = $wpdb->insert(
+                $this->db_manager->get_table('campaigns'),
+                $insert_data,
+                [
+                    '%s', '%s', '%f', '%d', '%d', '%d', '%d', '%d', '%s', '%s'
+                ]
+            );
+            
+            if ($result === false) {
+                $wpdb->query('ROLLBACK');
+                $this->logger->error('Failed to create campaign', [
+                    'error' => $wpdb->last_error,
+                    'data' => $insert_data
+                ]);
+                return new \WP_Error('db_error', __('Failed to create campaign', 'wc-fomo-discount'));
+            }
+            
+            $campaign_id = $wpdb->insert_id;
+            
+            // Log audit entry
+            $this->log_audit('create', 'campaign', $campaign_id, null, $insert_data);
+            
+            // Commit transaction
+            $wpdb->query('COMMIT');
+            
+            $this->logger->end_timer('create_campaign');
+            $this->logger->info('Campaign created', ['campaign_id' => $campaign_id]);
+            
+            // Clear cache
+            wp_cache_delete('active_campaigns', 'wcfd');
+            
+            // Trigger action
+            do_action('wcfd_campaign_created', $campaign_id, $insert_data);
+            
+            return $campaign_id;
+            
+        } catch (\Exception $e) {
+            $wpdb->query('ROLLBACK');
+            $this->logger->error('Campaign creation failed', [
+                'error' => $e->getMessage()
             ]);
-            return new \WP_Error('db_error', __('Failed to create campaign', 'wc-fomo-discount'));
+            return new \WP_Error('creation_failed', __('Failed to create campaign', 'wc-fomo-discount'));
         }
-        
-        $campaign_id = $wpdb->insert_id;
-        
-        $this->logger->end_timer('create_campaign');
-        $this->logger->info('Campaign created', ['campaign_id' => $campaign_id]);
-        
-        // Trigger action
-        do_action('wcfd_campaign_created', $campaign_id, $insert_data);
-        
-        return $campaign_id;
     }
     
     /**

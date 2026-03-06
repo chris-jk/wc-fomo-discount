@@ -95,6 +95,16 @@ register_deactivation_hook(__FILE__, 'wcfd_deactivate');
  * Plugin uninstall hook
  */
 function wcfd_uninstall() {
+    // Security check - ensure this is being called by WordPress during uninstall
+    if (!defined('WP_UNINSTALL_PLUGIN')) {
+        exit;
+    }
+    
+    // Check user capabilities - only administrators can uninstall
+    if (!current_user_can('activate_plugins')) {
+        return;
+    }
+    
     // Clean up plugin data
     delete_option('wcfd_db_version');
     delete_option('wcfd_settings');
@@ -108,7 +118,7 @@ function wcfd_uninstall() {
     if (apply_filters('wcfd_remove_data_on_uninstall', false)) {
         global $wpdb;
         
-        // Drop plugin tables
+        // Drop plugin tables - use prepare for safety even though table names are hardcoded
         $tables = [
             $wpdb->prefix . 'wcfd_campaigns',
             $wpdb->prefix . 'wcfd_claimed_codes',
@@ -119,7 +129,9 @@ function wcfd_uninstall() {
         ];
         
         foreach ($tables as $table) {
-            $wpdb->query("DROP TABLE IF EXISTS $table");
+            // Sanitize table name even though it's constructed from known values
+            $table = esc_sql($table);
+            $wpdb->query("DROP TABLE IF EXISTS `$table`");
         }
     }
 }
@@ -132,6 +144,15 @@ function wcfd_load_textdomain() {
     load_plugin_textdomain('wc-fomo-discount', false, dirname(plugin_basename(__FILE__)) . '/languages/');
 }
 add_action('init', 'wcfd_load_textdomain');
+
+/**
+ * Declare HPOS (High Performance Order Storage) compatibility
+ */
+add_action('before_woocommerce_init', function() {
+    if (class_exists(\Automattic\WooCommerce\Utilities\FeaturesUtil::class)) {
+        \Automattic\WooCommerce\Utilities\FeaturesUtil::declare_compatibility('custom_order_tables', __FILE__, true);
+    }
+});
 
 /**
  * Add custom plugin action links
