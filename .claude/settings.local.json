@@ -13,7 +13,17 @@
       "Bash(git commit:*)",
       "Bash(mysql:*)",
       "Bash(node:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Read(//var/log/apache2/**)",
+      "Read(//Applications/**)",
+      "Bash(php:*)",
+      "Bash(for:*)",
+      "Bash(do echo \"Checking $file:\")",
+      "Bash(if [ -f \"$file\" ])",
+      "Bash(then php -l \"$file\")",
+      "Bash(else echo \"FILE MISSING: $file\")",
+      "Bash(fi)",
+      "Bash(done)"
     ],
     "deny": [],
     "ask": []
